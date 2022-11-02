@@ -26,7 +26,7 @@ REALTIME_RESOLUTION = 0.250
 async def run(data, key, channels, sample_width, sample_rate, filepath):
     # How many bytes are contained in one second of audio.
     byte_rate = sample_width * sample_rate * channels
-    print('ℹ️ This demonstration will print all finalized results, not interim results.')
+    # print('ℹ️ This demonstration will print all finalized results, not interim results.')
 
     # Connect to the real-time streaming endpoint, attaching our credentials.
     async with websockets.connect(
@@ -35,15 +35,15 @@ async def run(data, key, channels, sample_width, sample_rate, filepath):
             'Authorization': 'Token {}'.format(key)
         }
     ) as ws:
-        print('🟢 Successfully opened Deepgram streaming connection')
-        print(f'ℹ️ Request ID: {ws.response_headers.get("dg-request-id")}')
+        print(f'ℹ️  Request ID: {ws.response_headers.get("dg-request-id")}')
+        print('🟢 (1/5) Successfully opened Deepgram streaming connection')
 
         async def sender(ws):
             """ Sends the data, mimicking a real-time connection.
             """
             nonlocal data
             try:
-                print("🎙 Sending data...")
+                print(f'🟢 (2/5) Preparing to stream {filepath} to Deepgram')
                 while len(data):
                     # How many bytes are in `REALTIME_RESOLUTION` seconds of audio?
                     i = int(byte_rate * REALTIME_RESOLUTION)
@@ -54,13 +54,10 @@ async def run(data, key, channels, sample_width, sample_rate, filepath):
                     # before the next packet.
                     await asyncio.sleep(REALTIME_RESOLUTION)
 
-                # An empty binary message tells Deepgram that no more audio
-                # will be sent. Deepgram will close the connection once all
-                # audio has finished processing.
                 await ws.send(json.dumps({                                                   
                     'type': 'CloseStream'
                 }))
-                print('🟢 Successfully closed Deepgram connection, waiting for final transcripts')
+                print('🟢 (5/5) Successfully closed Deepgram connection, waiting for final transcripts if necessary')
             except Exception as e: 
                 print(f'🔴 ERROR: Something happened while sending, {e}')
                 raise e
@@ -68,9 +65,14 @@ async def run(data, key, channels, sample_width, sample_rate, filepath):
         async def receiver(ws):
             """ Print out the messages received from the server.
             """
-            print("💬 Waiting to receive transcript...")
+            first_receive = True
+            
             async for msg in ws:
                 res = json.loads(msg)
+                if first_receive:
+                    print("🟢 (3/5) Data stream began successfully")
+                    print("🟢 (4/5) Began receiving transcription")
+                    first_receive = False
                 try:
                     # To see interim results in this demo, remove the conditional `if res['is_final']:`.
                     if res.get('is_final'):
@@ -129,16 +131,15 @@ def main():
                 (channels, sample_width, sample_rate, num_samples, _, _) = fh.getparams()
                 assert sample_width == 2, 'WAV data must be 16-bit.'
                 data = fh.readframes(num_samples)
-                print(f'ℹ️ Preparing to stream {args.input} to Deepgram')
                 # TODO: kick off the process
         else:
-            raise argparse.ArgumentTypeError(f'{args.input} is not a valid file.')
+            raise argparse.ArgumentTypeError(f'🔴 {args.input} is not a valid file.')
     
     elif validators.url(input):
         return input
         
     else:
-        raise argparse.ArgumentTypeError(f'{input} is an invalid input. Please enter the path to a WAV file, a stream URL, or "mic" to stream from your microphone.')
+        raise argparse.ArgumentTypeError(f'🔴 {input} is an invalid input. Please enter the path to a WAV file, a stream URL, or "mic" to stream from your microphone.')
 
 
     # Run the example.
