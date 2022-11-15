@@ -114,7 +114,7 @@ async def run(key, method, **kwargs):
                             print(f'{transcript}')
 
                         # if using the microphone, close stream if user says "goodbye"
-                        if method == 'mic' and transcript.lower().contains("goodbye"):
+                        if method == 'mic' and "goodbye" in transcript.lower():
                             await ws.send(json.dumps({                                                   
                                 "type": "CloseStream"                             
                             }))
