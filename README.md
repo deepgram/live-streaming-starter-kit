@@ -18,3 +18,9 @@ The `-i/--input` argument is optional. It can be set to either:
 * `/path/to/audio.wav` - the path to a signed, 16-bit little-endian encoded WAV file
 
 If not set, the included file `preamble.wav` will be streamed.
+
+## Issues & Feedback
+
+Please open [a new issue](https://github.com/deepgram/streaming-test-suite/issues) in this repository if you encounter any errors.
+
+If you have general feedback about our products, please start a new [GitHub Discussion](https://github.com/orgs/deepgram/discussions/categories/feedback).
