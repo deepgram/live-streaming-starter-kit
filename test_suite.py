@@ -68,12 +68,12 @@ async def run(key, method, **kwargs):
                 nonlocal data
                 # How many bytes are contained in one second of audio?
                 byte_rate = kwargs['sample_width'] * kwargs['sample_rate'] * kwargs['channels']
+                # How many bytes are in `REALTIME_RESOLUTION` seconds of audio?
+                chunk_size = int(byte_rate * REALTIME_RESOLUTION)
 
                 try:
                     while len(data):
-                        # How many bytes are in `REALTIME_RESOLUTION` seconds of audio?
-                        i = int(byte_rate * REALTIME_RESOLUTION)
-                        chunk, data = data[:i], data[i:]
+                        chunk, data = data[:chunk_size], data[chunk_size:]
                         # Send the data
                         await ws.send(chunk)
                         # Mimic real-time by waiting `REALTIME_RESOLUTION` seconds
