@@ -157,10 +157,10 @@ async def run(key, method, **kwargs):
         await asyncio.gather(*functions)
 
 def validate_input(input):
-    if input.startswith('mic'):
+    if input.lower().startswith('mic'):
         return input
 
-    elif input.endswith('wav'):
+    elif input.lower().endswith('wav'):
         if os.path.exists(input):
             return input
     
@@ -182,10 +182,10 @@ def main():
     input = args.input
 
     try:
-        if input.startswith('mic'):
+        if input.lower().startswith('mic'):
             asyncio.run(run(args.key, 'mic'))
 
-        elif input.endswith('wav'):
+        elif input.lower().endswith('wav'):
             if os.path.exists(input):
                 # Open the audio file.
                 with wave.open(input, 'rb') as fh:
