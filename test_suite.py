@@ -22,7 +22,7 @@ audio_queue = asyncio.Queue()
 REALTIME_RESOLUTION = 0.250
 
 # Used for microphone streaming only.
-def callback(input_data, frame_count, time_info, status_flag):
+def mic_callback(input_data, frame_count, time_info, status_flag):
     audio_queue.put_nowait(input_data)
     return (input_data, pyaudio.paContinue)
 
@@ -135,7 +135,7 @@ async def run(key, method, **kwargs):
                 rate = RATE,
                 input = True,
                 frames_per_buffer = CHUNK,
-                stream_callback = callback
+                stream_callback = mic_callback
             )
 
             stream.start_stream()
