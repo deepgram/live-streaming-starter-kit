@@ -10,12 +10,18 @@ The streaming test suite is designed to ensure you can stream basic audio to Dee
 
 ## Usage
 
-`python test_suite.py -k 'YOUR_DEEPGRAM_API_KEY' [-i mic|/path/to/audio.wav]`
+`python test_suite.py -k 'YOUR_DEEPGRAM_API_KEY' [-i mic|/path/to/audio.wav] [-o text|vtt|srt]`
 
 The `-i/--input` argument is optional. It can be set to either:
 
 * `mic` - stream from your microphone (requires pyaudio)
 * `/path/to/audio.wav` - the path to a signed, 16-bit little-endian encoded WAV file
+
+The `-o/--output` argument is optional. It can be set to:
+
+* `text` (default) - output the transcription returned by Deepgram in plain text
+* `vtt` - output transcriptions in VTT format
+* `srt` - output transcriptions in SRT format
 
 If not set, the included file `preamble.wav` will be streamed.
 
