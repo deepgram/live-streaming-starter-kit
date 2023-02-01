@@ -21,12 +21,32 @@ audio_queue = asyncio.Queue()
 # Used for file "streaming" only.
 REALTIME_RESOLUTION = 0.250
 
+subtitle_line_counter = 0
+
+def subtitle_time_formatter(seconds, separator):
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds - int(seconds)) * 1000)
+    return f"{hours:02}:{minutes:02}:{secs:02}{separator}{millis:03}"
+
+def subtitle_formatter(response, separator="."):
+    global subtitle_line_counter
+    start = response['start']
+    end = start + response['duration']
+    transcript = response.get('channel', {})\
+        .get('alternatives', [{}])[0]\
+        .get('transcript', '')
+    subtitle_line_counter += 1
+    subtitle_string = f"{subtitle_line_counter}\n{subtitle_time_formatter(start, separator)} --> {subtitle_time_formatter(end, separator)}\n- {transcript}\n\n"
+    return subtitle_string
+
 # Used for microphone streaming only.
 def mic_callback(input_data, frame_count, time_info, status_flag):
     audio_queue.put_nowait(input_data)
     return (input_data, pyaudio.paContinue)
 
-async def run(key, method, **kwargs):
+async def run(key, method, output, **kwargs):
     url = 'wss://api.deepgram.com/v1/listen?punctuate=true'
 
     if method == 'mic':
@@ -110,8 +130,16 @@ async def run(key, method, **kwargs):
                         if transcript != '':
                             if first_transcript:
                                 print("🟢 (4/5) Began receiving transcription")
+                                # if using webvtt, print out header
+                                if output == 'vtt':
+                                    print('WEBVTT\n')
                                 first_transcript = False
-                            print(f'{transcript}')
+                            if output == 'vtt':
+                                print(subtitle_formatter(res))
+                            elif output == 'srt':
+                                print(subtitle_formatter(res, ","))
+                            else:
+                                print(f'{transcript}')
 
                         # if using the microphone, close stream if user says "goodbye"
                         if method == 'mic' and "goodbye" in transcript.lower():
@@ -166,12 +194,21 @@ def validate_input(input):
     
     raise argparse.ArgumentTypeError(f'{input} is an invalid input. Please enter the path to a WAV file, a stream URL, or "mic" to stream from your microphone.')
 
+def validate_output(output):
+    if output.lower() == ('text') \
+        or output.lower() == ('vtt') \
+        or output.lower() == ('srt'):
+        return output
+    
+    raise argparse.ArgumentTypeError(f'{output} is invalid. Please enter "text", "vtt", or "srt".')
+
 def parse_args():
     """ Parses the command-line arguments.
     """
     parser = argparse.ArgumentParser(description='Submits data to the real-time streaming endpoint.')
     parser.add_argument('-k', '--key', required=True, help='YOUR_DEEPGRAM_API_KEY (authorization)')
     parser.add_argument('-i', '--input', help='Input to stream to Deepgram. Can be "mic" to stream from your microphone (requires pyaudio) or the path to a WAV file. Defaults to the included file preamble.wav', nargs='?', const=1, default='preamble.wav', type=validate_input)
+    parser.add_argument('-o', '--output', help='Output format. Can be "text" to return plain text, "VTT", or "SRT". Defaults to "text".', nargs='?', const=1, default='text', type=validate_output)
     return parser.parse_args()
 
 def main():
@@ -180,10 +217,11 @@ def main():
     # Parse the command-line arguments.
     args = parse_args()
     input = args.input
+    output = args.output.lower()
 
     try:
         if input.lower().startswith('mic'):
-            asyncio.run(run(args.key, 'mic'))
+            asyncio.run(run(args.key, 'mic', output))
 
         elif input.lower().endswith('wav'):
             if os.path.exists(input):
@@ -192,7 +230,7 @@ def main():
                     (channels, sample_width, sample_rate, num_samples, _, _) = fh.getparams()
                     assert sample_width == 2, 'WAV data must be 16-bit.'
                     data = fh.readframes(num_samples)
-                    asyncio.run(run(args.key, 'wav', data=data, channels=channels, sample_width=sample_width, sample_rate=sample_rate, filepath=args.input))
+                    asyncio.run(run(args.key, 'wav', output, data=data, channels=channels, sample_width=sample_width, sample_rate=sample_rate, filepath=args.input))
             else:
                 raise argparse.ArgumentTypeError(f'🔴 {args.input} is not a valid WAV file.')
             
