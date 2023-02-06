@@ -46,7 +46,7 @@ def mic_callback(input_data, frame_count, time_info, status_flag):
     audio_queue.put_nowait(input_data)
     return (input_data, pyaudio.paContinue)
 
-async def run(key, method, output, **kwargs):
+async def run(key, method, format, **kwargs):
     url = 'wss://api.deepgram.com/v1/listen?punctuate=true'
 
     if method == 'mic':
@@ -131,12 +131,12 @@ async def run(key, method, output, **kwargs):
                             if first_transcript:
                                 print("🟢 (4/5) Began receiving transcription")
                                 # if using webvtt, print out header
-                                if output == 'vtt':
+                                if format == 'vtt':
                                     print('WEBVTT\n')
                                 first_transcript = False
-                            if output == 'vtt':
+                            if format == 'vtt':
                                 print(subtitle_formatter(res))
-                            elif output == 'srt':
+                            elif format == 'srt':
                                 print(subtitle_formatter(res, ","))
                             else:
                                 print(f'{transcript}')
@@ -194,13 +194,13 @@ def validate_input(input):
     
     raise argparse.ArgumentTypeError(f'{input} is an invalid input. Please enter the path to a WAV file, a stream URL, or "mic" to stream from your microphone.')
 
-def validate_output(output):
-    if output.lower() == ('text') \
-        or output.lower() == ('vtt') \
-        or output.lower() == ('srt'):
-        return output
+def validate_format(format):
+    if format.lower() == ('text') \
+        or format.lower() == ('vtt') \
+        or format.lower() == ('srt'):
+        return format
     
-    raise argparse.ArgumentTypeError(f'{output} is invalid. Please enter "text", "vtt", or "srt".')
+    raise argparse.ArgumentTypeError(f'{format} is invalid. Please enter "text", "vtt", or "srt".')
 
 def parse_args():
     """ Parses the command-line arguments.
@@ -208,7 +208,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Submits data to the real-time streaming endpoint.')
     parser.add_argument('-k', '--key', required=True, help='YOUR_DEEPGRAM_API_KEY (authorization)')
     parser.add_argument('-i', '--input', help='Input to stream to Deepgram. Can be "mic" to stream from your microphone (requires pyaudio) or the path to a WAV file. Defaults to the included file preamble.wav', nargs='?', const=1, default='preamble.wav', type=validate_input)
-    parser.add_argument('-o', '--output', help='Output format. Can be "text" to return plain text, "VTT", or "SRT". Defaults to "text".', nargs='?', const=1, default='text', type=validate_output)
+    parser.add_argument('-f', '--format', help='Format for output. Can be "text" to return plain text, "VTT", or "SRT". Defaults to "text".', nargs='?', const=1, default='text', type=validate_format)
     return parser.parse_args()
 
 def main():
@@ -217,11 +217,11 @@ def main():
     # Parse the command-line arguments.
     args = parse_args()
     input = args.input
-    output = args.output.lower()
+    format = args.format.lower()
 
     try:
         if input.lower().startswith('mic'):
-            asyncio.run(run(args.key, 'mic', output))
+            asyncio.run(run(args.key, 'mic', format))
 
         elif input.lower().endswith('wav'):
             if os.path.exists(input):
@@ -230,7 +230,7 @@ def main():
                     (channels, sample_width, sample_rate, num_samples, _, _) = fh.getparams()
                     assert sample_width == 2, 'WAV data must be 16-bit.'
                     data = fh.readframes(num_samples)
-                    asyncio.run(run(args.key, 'wav', output, data=data, channels=channels, sample_width=sample_width, sample_rate=sample_rate, filepath=args.input))
+                    asyncio.run(run(args.key, 'wav', format, data=data, channels=channels, sample_width=sample_width, sample_rate=sample_rate, filepath=args.input))
             else:
                 raise argparse.ArgumentTypeError(f'🔴 {args.input} is not a valid WAV file.')
             
