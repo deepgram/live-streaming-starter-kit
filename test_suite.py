@@ -30,15 +30,28 @@ def subtitle_time_formatter(seconds, separator):
     millis = int((seconds - int(seconds)) * 1000)
     return f"{hours:02}:{minutes:02}:{secs:02}{separator}{millis:03}"
 
-def subtitle_formatter(response, separator="."):
+def subtitle_formatter(response, format):
     global subtitle_line_counter
+    subtitle_line_counter += 1
+
     start = response['start']
     end = start + response['duration']
     transcript = response.get('channel', {})\
         .get('alternatives', [{}])[0]\
         .get('transcript', '')
-    subtitle_line_counter += 1
-    subtitle_string = f"{subtitle_line_counter}\n{subtitle_time_formatter(start, separator)} --> {subtitle_time_formatter(end, separator)}\n- {transcript}\n\n"
+
+    if format == 'srt':
+        separator = ','
+    else:
+        separator= '.'
+
+    subtitle_string = f"{subtitle_line_counter}\n"
+    subtitle_string += f"{subtitle_time_formatter(start, separator)} --> "
+    subtitle_string += f"{subtitle_time_formatter(end, separator)}\n"
+    if format == 'vtt':
+        subtitle_string += "- "
+    subtitle_string += f"{transcript}\n\n"
+
     return subtitle_string
 
 # Used for microphone streaming only.
@@ -134,10 +147,8 @@ async def run(key, method, format, **kwargs):
                                 if format == 'vtt':
                                     print('WEBVTT\n')
                                 first_transcript = False
-                            if format == 'vtt':
-                                print(subtitle_formatter(res))
-                            elif format == 'srt':
-                                print(subtitle_formatter(res, ","))
+                            if format == 'vtt' or format == 'srt':
+                                print(subtitle_formatter(res, format))
                             else:
                                 print(f'{transcript}')
 
