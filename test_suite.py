@@ -10,6 +10,9 @@ import websockets
 from datetime import datetime
 startTime = datetime.now()
 
+all_mic_data = []
+all_transcripts = []
+
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000
@@ -86,6 +89,7 @@ async def run(key, method, format, **kwargs):
                 try:
                     while True:
                         mic_data = await audio_queue.get()
+                        all_mic_data.append(mic_data)
                         await ws.send(mic_data)
                 except websockets.exceptions.ConnectionClosedOK:
                     await ws.send(json.dumps({                                                   
@@ -148,12 +152,12 @@ async def run(key, method, format, **kwargs):
                                     print('WEBVTT\n')
                                 first_transcript = False
                             if format == 'vtt' or format == 'srt':
-                                print(subtitle_formatter(res, format))
-                            else:
-                                print(f'{transcript}')
+                                transcript = subtitle_formatter(res, format)
+                            print(transcript)
+                            all_transcripts.append(transcript)
 
                         # if using the microphone, close stream if user says "goodbye"
-                        if method == 'mic' and "goodbye" in transcript.lower():
+                        if method == 'mic' and 'goodbye' in transcript.lower():
                             await ws.send(json.dumps({                                                   
                                 "type": "CloseStream"                             
                             }))
@@ -161,6 +165,29 @@ async def run(key, method, format, **kwargs):
                     
                     # handle end of stream
                     if res.get('created'):
+                        # save subtitle data if specified
+                        if format == 'vtt' or format == 'srt':
+                            data_dir = os.path.abspath(os.path.join(os.path.curdir, 'data'))
+                            if not os.path.exists(data_dir):
+                                os.makedirs(data_dir)
+
+                            transcript_file_path = os.path.abspath(os.path.join(data_dir, f"{startTime.strftime('%Y%m%d%H%M')}.{format}"))
+                            with open(transcript_file_path, 'w') as f:
+                                f.write(''.join(all_transcripts))
+                            print(f'🟢 Subtitles saved to {transcript_file_path}')
+
+                            # also save mic data if we were live streaming audio
+                            # otherwise the wav file will already be saved to disk
+                            if method == 'mic':
+                                wave_file_path = os.path.abspath(os.path.join(data_dir, f"{startTime.strftime('%Y%m%d%H%M')}.wav"))
+                                wave_file = wave.open(wave_file_path, 'wb')
+                                wave_file.setnchannels(CHANNELS)
+                                wave_file.setsampwidth(SAMPLE_SIZE)
+                                wave_file.setframerate(RATE)
+                                wave_file.writeframes(b''.join(all_mic_data))
+                                wave_file.close()
+                                print(f'🟢 Mic audio saved to {wave_file_path}')
+
                         print(f'🟢 Request finished with a duration of {res["duration"]} seconds. Exiting!')
                 except KeyError:
                     print(f'🔴 ERROR: Received unexpected API response! {msg}')
@@ -176,8 +203,11 @@ async def run(key, method, format, **kwargs):
                 frames_per_buffer = CHUNK,
                 stream_callback = mic_callback
             )
-
+            
             stream.start_stream()
+
+            global SAMPLE_SIZE
+            SAMPLE_SIZE = audio.get_sample_size(FORMAT)
 
             while stream.is_active():
                 await asyncio.sleep(0.1)
@@ -219,7 +249,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Submits data to the real-time streaming endpoint.')
     parser.add_argument('-k', '--key', required=True, help='YOUR_DEEPGRAM_API_KEY (authorization)')
     parser.add_argument('-i', '--input', help='Input to stream to Deepgram. Can be "mic" to stream from your microphone (requires pyaudio) or the path to a WAV file. Defaults to the included file preamble.wav', nargs='?', const=1, default='preamble.wav', type=validate_input)
-    parser.add_argument('-f', '--format', help='Format for output. Can be "text" to return plain text, "VTT", or "SRT". Defaults to "text".', nargs='?', const=1, default='text', type=validate_format)
+    parser.add_argument('-f', '--format', help='Format for output. Can be "text" to return plain text, "VTT", or "SRT". If set to VTT or SRT, the audio file and subtitle file will be saved to the data/ directory. Defaults to "text".', nargs='?', const=1, default='text', type=validate_format)
     return parser.parse_args()
 
 def main():
