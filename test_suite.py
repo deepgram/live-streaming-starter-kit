@@ -10,6 +10,9 @@ import websockets
 from datetime import datetime
 startTime = datetime.now()
 
+all_mic_data = []
+all_transcripts = []
+
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 16000
@@ -21,12 +24,45 @@ audio_queue = asyncio.Queue()
 # Used for file "streaming" only.
 REALTIME_RESOLUTION = 0.250
 
+subtitle_line_counter = 0
+
+def subtitle_time_formatter(seconds, separator):
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millis = int((seconds - int(seconds)) * 1000)
+    return f"{hours:02}:{minutes:02}:{secs:02}{separator}{millis:03}"
+
+def subtitle_formatter(response, format):
+    global subtitle_line_counter
+    subtitle_line_counter += 1
+
+    start = response['start']
+    end = start + response['duration']
+    transcript = response.get('channel', {})\
+        .get('alternatives', [{}])[0]\
+        .get('transcript', '')
+
+    if format == 'srt':
+        separator = ','
+    else:
+        separator= '.'
+
+    subtitle_string = f"{subtitle_line_counter}\n"
+    subtitle_string += f"{subtitle_time_formatter(start, separator)} --> "
+    subtitle_string += f"{subtitle_time_formatter(end, separator)}\n"
+    if format == 'vtt':
+        subtitle_string += "- "
+    subtitle_string += f"{transcript}\n\n"
+
+    return subtitle_string
+
 # Used for microphone streaming only.
 def mic_callback(input_data, frame_count, time_info, status_flag):
     audio_queue.put_nowait(input_data)
     return (input_data, pyaudio.paContinue)
 
-async def run(key, method, **kwargs):
+async def run(key, method, format, **kwargs):
     url = 'wss://api.deepgram.com/v1/listen?punctuate=true'
 
     if method == 'mic':
@@ -53,6 +89,7 @@ async def run(key, method, **kwargs):
                 try:
                     while True:
                         mic_data = await audio_queue.get()
+                        all_mic_data.append(mic_data)
                         await ws.send(mic_data)
                 except websockets.exceptions.ConnectionClosedOK:
                     await ws.send(json.dumps({                                                   
@@ -110,11 +147,17 @@ async def run(key, method, **kwargs):
                         if transcript != '':
                             if first_transcript:
                                 print("🟢 (4/5) Began receiving transcription")
+                                # if using webvtt, print out header
+                                if format == 'vtt':
+                                    print('WEBVTT\n')
                                 first_transcript = False
-                            print(f'{transcript}')
+                            if format == 'vtt' or format == 'srt':
+                                transcript = subtitle_formatter(res, format)
+                            print(transcript)
+                            all_transcripts.append(transcript)
 
                         # if using the microphone, close stream if user says "goodbye"
-                        if method == 'mic' and "goodbye" in transcript.lower():
+                        if method == 'mic' and 'goodbye' in transcript.lower():
                             await ws.send(json.dumps({                                                   
                                 "type": "CloseStream"                             
                             }))
@@ -122,6 +165,29 @@ async def run(key, method, **kwargs):
                     
                     # handle end of stream
                     if res.get('created'):
+                        # save subtitle data if specified
+                        if format == 'vtt' or format == 'srt':
+                            data_dir = os.path.abspath(os.path.join(os.path.curdir, 'data'))
+                            if not os.path.exists(data_dir):
+                                os.makedirs(data_dir)
+
+                            transcript_file_path = os.path.abspath(os.path.join(data_dir, f"{startTime.strftime('%Y%m%d%H%M')}.{format}"))
+                            with open(transcript_file_path, 'w') as f:
+                                f.write(''.join(all_transcripts))
+                            print(f'🟢 Subtitles saved to {transcript_file_path}')
+
+                            # also save mic data if we were live streaming audio
+                            # otherwise the wav file will already be saved to disk
+                            if method == 'mic':
+                                wave_file_path = os.path.abspath(os.path.join(data_dir, f"{startTime.strftime('%Y%m%d%H%M')}.wav"))
+                                wave_file = wave.open(wave_file_path, 'wb')
+                                wave_file.setnchannels(CHANNELS)
+                                wave_file.setsampwidth(SAMPLE_SIZE)
+                                wave_file.setframerate(RATE)
+                                wave_file.writeframes(b''.join(all_mic_data))
+                                wave_file.close()
+                                print(f'🟢 Mic audio saved to {wave_file_path}')
+
                         print(f'🟢 Request finished with a duration of {res["duration"]} seconds. Exiting!')
                 except KeyError:
                     print(f'🔴 ERROR: Received unexpected API response! {msg}')
@@ -137,8 +203,11 @@ async def run(key, method, **kwargs):
                 frames_per_buffer = CHUNK,
                 stream_callback = mic_callback
             )
-
+            
             stream.start_stream()
+
+            global SAMPLE_SIZE
+            SAMPLE_SIZE = audio.get_sample_size(FORMAT)
 
             while stream.is_active():
                 await asyncio.sleep(0.1)
@@ -166,12 +235,21 @@ def validate_input(input):
     
     raise argparse.ArgumentTypeError(f'{input} is an invalid input. Please enter the path to a WAV file, a stream URL, or "mic" to stream from your microphone.')
 
+def validate_format(format):
+    if format.lower() == ('text') \
+        or format.lower() == ('vtt') \
+        or format.lower() == ('srt'):
+        return format
+    
+    raise argparse.ArgumentTypeError(f'{format} is invalid. Please enter "text", "vtt", or "srt".')
+
 def parse_args():
     """ Parses the command-line arguments.
     """
     parser = argparse.ArgumentParser(description='Submits data to the real-time streaming endpoint.')
     parser.add_argument('-k', '--key', required=True, help='YOUR_DEEPGRAM_API_KEY (authorization)')
     parser.add_argument('-i', '--input', help='Input to stream to Deepgram. Can be "mic" to stream from your microphone (requires pyaudio) or the path to a WAV file. Defaults to the included file preamble.wav', nargs='?', const=1, default='preamble.wav', type=validate_input)
+    parser.add_argument('-f', '--format', help='Format for output. Can be "text" to return plain text, "VTT", or "SRT". If set to VTT or SRT, the audio file and subtitle file will be saved to the data/ directory. Defaults to "text".', nargs='?', const=1, default='text', type=validate_format)
     return parser.parse_args()
 
 def main():
@@ -180,10 +258,11 @@ def main():
     # Parse the command-line arguments.
     args = parse_args()
     input = args.input
+    format = args.format.lower()
 
     try:
         if input.lower().startswith('mic'):
-            asyncio.run(run(args.key, 'mic'))
+            asyncio.run(run(args.key, 'mic', format))
 
         elif input.lower().endswith('wav'):
             if os.path.exists(input):
@@ -192,7 +271,7 @@ def main():
                     (channels, sample_width, sample_rate, num_samples, _, _) = fh.getparams()
                     assert sample_width == 2, 'WAV data must be 16-bit.'
                     data = fh.readframes(num_samples)
-                    asyncio.run(run(args.key, 'wav', data=data, channels=channels, sample_width=sample_width, sample_rate=sample_rate, filepath=args.input))
+                    asyncio.run(run(args.key, 'wav', format, data=data, channels=channels, sample_width=sample_width, sample_rate=sample_rate, filepath=args.input))
             else:
                 raise argparse.ArgumentTypeError(f'🔴 {args.input} is not a valid WAV file.')
             
