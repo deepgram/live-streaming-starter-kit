@@ -111,11 +111,11 @@ async def run(key, method, format, **kwargs):
                 try:
                     while len(data):
                         chunk, data = data[:chunk_size], data[chunk_size:]
-                        # Send the data
-                        await ws.send(chunk)
                         # Mimic real-time by waiting `REALTIME_RESOLUTION` seconds
                         # before the next packet.
                         await asyncio.sleep(REALTIME_RESOLUTION)
+                        # Send the data
+                        await ws.send(chunk)
 
                     await ws.send(json.dumps({                                                   
                         'type': 'CloseStream'
