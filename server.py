@@ -3,23 +3,10 @@ import websockets
 import time
 from urllib.parse import parse_qs
 import pydub
-import tempfile
 import json
 from io import BytesIO
 
-def save_audio(encoding, sample_rate, sample_width, channels, data):
-    # map the encoding string to a pydub codec
-    codec_map = {
-        'linear16': 's16le',
-        'flac': 'flac',
-        'mulaw': 'mulaw',
-        'amr-nb': 'amr_nb',
-        'amr-wb': 'amr_wb',
-        'opus': 'opus',
-        'speex': 'speex'
-    }
-
-
+def save_audio(encoding, data):
     codec_extension_map = {
         'linear16': 'wav',
         'flac': 'flac',
@@ -33,11 +20,11 @@ def save_audio(encoding, sample_rate, sample_width, channels, data):
     try:
         extension = codec_extension_map[encoding]
     except:
-        return "ERROR: Unsupported codec!"
+        raise "ERROR: Unsupported codec!"
 
     filename = f'tmp.{extension}'
-    raw_audio = pydub.AudioSegment.from_raw(BytesIO(data), sample_width=sample_width, channels=channels, frame_rate=sample_rate)
-    raw_audio.export(filename)
+    with open(filename, 'wb') as file:
+        file.write(data)
 
     return filename
 
@@ -88,7 +75,7 @@ async def audio_handler(websocket, path):
                 json_message = json.loads(message)
                 if json_message.get('type') == 'CloseStream':
                     # save the audio data to a file
-                    filename = save_audio(encoding, sample_rate, sample_width, channels, audio_data)
+                    filename = save_audio(encoding, audio_data)
                     await logger(websocket, f"Saved audio data to {filename}")
                     await websocket.send(json.dumps({ 'total_bytes': len(audio_data)}))
                     return
