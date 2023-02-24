@@ -100,8 +100,9 @@ async def audio_handler(websocket, path):
         print("Client closed connection")
 
 async def run_server():
-    server = await websockets.serve(audio_handler, 'localhost', 5000)
-    print("Server is now listening for new connections")
+    port = 5000
+    server = await websockets.serve(audio_handler, 'localhost', port)
+    print(f"Server is now listening for new connections on port {port}")
     await server.wait_closed()
 
 if __name__ == '__main__':
