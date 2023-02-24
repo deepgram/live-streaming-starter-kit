@@ -31,8 +31,7 @@ def save_audio(encoding, sample_rate, sample_width, channels, data):
     }
 
     try:
-        codec = codec_map.get(encoding)
-        extension = codec_extension_map.get(encoding)
+        extension = codec_extension_map[encoding]
     except:
         return "ERROR: Unsupported codec!"
 
