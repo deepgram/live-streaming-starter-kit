@@ -30,43 +30,35 @@ def save_audio(encoding, sample_rate, channels, data):
         'speex': 'spx'
     }
 
-    codec = codec_map.get(encoding)
-    extension = CODEC_EXTENSION_MAP.get(encoding)
-    print(codec)
+    try:
+        codec = codec_map.get(encoding)
+        extension = CODEC_EXTENSION_MAP.get(encoding)
+    except:
+        return "ERROR: Unsupported codec!"
 
     filename = f'tmp.{extension}'
     raw_audio = pydub.AudioSegment.from_raw(BytesIO(data), sample_width=2, channels=channels, frame_rate=sample_rate)
     raw_audio.export(filename)
-    # create a temporary file
-    #temp = tempfile.NamedTemporaryFile(mode="wb", delete=False)
-    #filename = temp.name
-    #temp.close()
 
-    print(filename)
-    # write the data to the temporary file
-    #with open(filename, 'wb') as f:
-    #    f.write(data)
+    return filename
 
-    #import ipdb; ipdb.set_trace()
-
-    
-    # create an audio segment from the file
-    #audio = pydub.AudioSegment.from_file(filename, format=extension)
-
-    # set the sample rate
-    #audio = audio.set_frame_rate(sample_rate)
-
-    # save the audio to a file
-    #audio.export(filename)
 
 async def audio_handler(websocket, path):
-    parsed_path = parse_qs(path)
+    print("New websocket connection opened")
+    await websocket.send(json.dumps({
+        "msg": "New websocket connection opened"
+    }))
+
     # extract encoding and sample rate from the query string
+    parsed_path = parse_qs(path)
     encoding = parsed_path.get('encoding', [''])[0]
     sample_rate = int(parsed_path.get('sample_rate', [0])[0])
     channels = int(parsed_path.get('channels', [1])[0])
 
-    print(sample_rate)
+    print(f"Expecting audio data with {encoding}, {sample_rate} sample rate, and {channels} channel(s)")
+    await websocket.send(json.dumps({
+        "msg": f"Expecting audio data with {encoding}, {sample_rate} sample rate, and {channels} channel(s)"
+    }))
 
     sample_width = 2 # assuming 16-bit encoding
     # How many bytes are contained in one second of audio?
@@ -76,37 +68,47 @@ async def audio_handler(websocket, path):
     bytes_received = 0
     audio_data = bytearray(b'')
 
-    async for message in websocket:
-        #print(message)
-        # handle text messages
-        if not isinstance(message, bytes):
-            json_message = json.loads(message)
-            if json_message.get('type') == 'CloseStream':
-                # save the audio data to a file
-                save_audio(encoding, sample_rate, channels, audio_data)
-                await websocket.close(code=1000, reason="Connection closed")
-                return
+    try:
+        async for message in websocket:
+            # handle binary messages (audio data)
+            if isinstance(message, bytes):
+                # process the audio data received from the client
+                bytes_received += len(message)
+                
+                audio_data += message
+                
+                # calculate the elapsed time
+                elapsed_time = time.time() - start_time
+                
+                # validate the data rate
+                if bytes_received / elapsed_time > expected_bytes_per_second:
+                    await websocket.close(code=1011, reason="Data rate too high")
+                    return
+                await websocket.send(json.dumps({
+                    "msg": f"Received {bytes_received} bytes of data"
+                }))
+
+            # handle stream closures or other text messages
             else:
-                await websocket.close(code=1011, reason='Invalid frame sent')
-                return
+                json_message = json.loads(message)
+                if json_message.get('type') == 'CloseStream':
+                    # save the audio data to a file
+                    filename = save_audio(encoding, sample_rate, channels, audio_data)
+                    await websocket.send(json.dumps({
+                        "msg": f"Saved audio data to {filename}"
+                    }))
+                    return
+                else:
+                    await websocket.close(code=1011, reason='Invalid frame sent')
+                    return
+                
+    except websockets.exceptions.ConnectionClosedOK:
+        print("Client closed connection")
 
-        # process the audio data received from the client
-        bytes_received += len(message)
-        
-        audio_data += message
-        
-        # calculate the elapsed time
-        elapsed_time = time.time() - start_time
-        
-        # validate the data rate
-        if bytes_received / elapsed_time > expected_bytes_per_second:
-            await websocket.close(code=1011, reason="Data rate too high")
-            return
-
-    await websocket.close(code=1000, reason="Connection closed")
+async def run_server():
+    server = await websockets.serve(audio_handler, 'localhost', 5000)
+    print("Server is now listening for new connections")
+    await server.wait_closed()
 
 if __name__ == '__main__':
-    start_server = websockets.serve(audio_handler, 'localhost', 5000)
-
-    asyncio.get_event_loop().run_until_complete(start_server)
-    asyncio.get_event_loop().run_forever()
+    asyncio.run(run_server())
