@@ -90,6 +90,7 @@ async def audio_handler(websocket, path):
                     # save the audio data to a file
                     filename = save_audio(encoding, sample_rate, sample_width, channels, audio_data)
                     await logger(websocket, f"Saved audio data to {filename}")
+                    await websocket.send(json.dumps({ 'total_bytes': len(audio_data)}))
                     return
                 else:
                     await websocket.close(code=1011, reason='Invalid frame sent')
