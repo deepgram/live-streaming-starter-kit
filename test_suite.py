@@ -140,6 +140,9 @@ async def run(key, method, format, **kwargs):
                     print("🟢 (3/5) Successfully receiving Deepgram messages, waiting for finalized transcription...")
                     first_message = False
                 try:
+                    # handle local server messages
+                    if res.get('msg'):
+                        print(res['msg'])
                     if res.get('is_final'):
                         transcript = res.get('channel', {})\
                         .get('alternatives', [{}])[0]\
