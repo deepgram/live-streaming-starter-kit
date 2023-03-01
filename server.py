@@ -5,6 +5,7 @@ from urllib.parse import parse_qs
 import pydub
 import json
 from io import BytesIO
+import os
 
 def save_audio(encoding, sample_rate, sample_width, channels, data):
     # map the encoding to a pydub format
@@ -25,7 +26,7 @@ def save_audio(encoding, sample_rate, sample_width, channels, data):
 
     # TODO timestamp this
     filename = 'tmp'
-    with open(f'{filename}.raw', 'wb') as file:
+    with open(os.path.join('data', f'{filename}.raw'), 'wb') as file:
        file.write(data)
 
     audio_segment = pydub.AudioSegment.from_raw(
@@ -35,11 +36,11 @@ def save_audio(encoding, sample_rate, sample_width, channels, data):
         frame_rate=sample_rate
     )
     audio_segment.export(
-        f'{filename}.{extension}',
+        os.path.join('data', f'{filename}.{extension}'),
         format=extension
     )
 
-    return f'{filename}.{extension}'
+    return os.path.join('data', f'{filename}.{extension}')
 
 # utility to send log messages to both server and client
 async def logger(websocket, message, key="msg"):
