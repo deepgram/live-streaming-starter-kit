@@ -63,18 +63,18 @@ def mic_callback(input_data, frame_count, time_info, status_flag):
     return (input_data, pyaudio.paContinue)
 
 async def run(key, method, format, **kwargs):
-    url = 'wss://api.deepgram.com/v1/listen?punctuate=true'
+    deepgram_url = 'wss://api.deepgram.com/v1/listen?punctuate=true'
 
     if method == 'mic':
-        url += '&encoding=linear16&sample_rate=16000'
+        deepgram_url += '&encoding=linear16&sample_rate=16000'
     
     elif method == 'wav':
         data = kwargs['data']
-        url += f'&channels={kwargs["channels"]}&sample_rate={kwargs["sample_rate"]}&encoding=linear16'
+        deepgram_url += f'&channels={kwargs["channels"]}&sample_rate={kwargs["sample_rate"]}&encoding=linear16'
 
     # Connect to the real-time streaming endpoint, attaching our credentials.
     async with websockets.connect(
-        url,
+        deepgram_url,
         extra_headers={
             'Authorization': 'Token {}'.format(key)
         }
