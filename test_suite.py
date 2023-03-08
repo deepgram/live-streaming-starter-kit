@@ -1,6 +1,7 @@
 import pyaudio
 import argparse
 import asyncio
+import aiohttp
 import json
 import os
 import sys
@@ -83,7 +84,7 @@ async def run(key, method, format, **kwargs):
         print('🟢 (1/5) Successfully opened Deepgram streaming connection')
 
         async def sender(ws):
-            print(f'🟢 (2/5) Ready to stream {method if method == "mic" else kwargs["filepath"]} audio to Deepgram{". Speak into your microphone to transcribe." if method == "mic" else ""}')
+            print(f'🟢 (2/5) Ready to stream {method if (method == "mic" or method == "url") else kwargs["filepath"]} audio to Deepgram{". Speak into your microphone to transcribe." if method == "mic" else ""}')
 
             if method == 'mic':
                 try:
@@ -100,6 +101,18 @@ async def run(key, method, format, **kwargs):
                 except Exception as e:
                     print(f'Error while sending: {str(e)}')
                     raise
+
+            elif method == 'url':
+                # Listen for the connection to open and send streaming audio from the URL to Deepgram
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(kwargs['url']) as audio:
+                        while True:
+                            remote_url_data = await audio.content.readany()
+                            await ws.send(remote_url_data)
+
+                            # If no data is being sent from the live stream, then break out of the loop.
+                            if not remote_url_data:
+                                break
 
             elif method == 'wav':
                 nonlocal data
@@ -235,8 +248,11 @@ def validate_input(input):
     elif input.lower().endswith('wav'):
         if os.path.exists(input):
             return input
+        
+    elif input.lower().startswith('http'):
+        return input
     
-    raise argparse.ArgumentTypeError(f'{input} is an invalid input. Please enter the path to a WAV file, a stream URL, or "mic" to stream from your microphone.')
+    raise argparse.ArgumentTypeError(f'{input} is an invalid input. Please enter the path to a WAV file, a valid stream URL, or "mic" to stream from your microphone.')
 
 def validate_format(format):
     if format.lower() == ('text') \
@@ -251,7 +267,7 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(description='Submits data to the real-time streaming endpoint.')
     parser.add_argument('-k', '--key', required=True, help='YOUR_DEEPGRAM_API_KEY (authorization)')
-    parser.add_argument('-i', '--input', help='Input to stream to Deepgram. Can be "mic" to stream from your microphone (requires pyaudio) or the path to a WAV file. Defaults to the included file preamble.wav', nargs='?', const=1, default='preamble.wav', type=validate_input)
+    parser.add_argument('-i', '--input', help='Input to stream to Deepgram. Can be "mic" to stream from your microphone (requires pyaudio), the path to a WAV file, or the URL to a direct audio stream. Defaults to the included file preamble.wav', nargs='?', const=1, default='preamble.wav', type=validate_input)
     parser.add_argument('-f', '--format', help='Format for output. Can be "text" to return plain text, "VTT", or "SRT". If set to VTT or SRT, the audio file and subtitle file will be saved to the data/ directory. Defaults to "text".', nargs='?', const=1, default='text', type=validate_format)
     return parser.parse_args()
 
@@ -278,8 +294,11 @@ def main():
             else:
                 raise argparse.ArgumentTypeError(f'🔴 {args.input} is not a valid WAV file.')
             
+        elif input.lower().startswith('http'):
+            asyncio.run(run(args.key, 'url', format, url=input))
+
         else:
-            raise argparse.ArgumentTypeError(f'🔴 {input} is an invalid input. Please enter the path to a WAV file or "mic" to stream from your microphone.')
+            raise argparse.ArgumentTypeError(f'🔴 {input} is an invalid input. Please enter the path to a WAV file, a valid stream URL, or "mic" to stream from your microphone.')
         
     except websockets.exceptions.InvalidStatusCode as e:
         print(f'🔴 ERROR: Could not connect to Deepgram! {e.headers.get("dg-error")}')
