@@ -17,9 +17,16 @@ encoding_samplewidth_map = {
 async def audio_stream(audio_file_path, encoding, sample_rate, channels):
     data = open(audio_file_path, "rb").read()
 
-    url = f"ws://localhost:5000?encoding={encoding}&sample_rate={sample_rate}&channels={channels}"
+    url = 'ws://localhost:5000'
+    # To test integrating with DG, uncomment the following line (also, specify your API key below)
+    url = 'wss://api.deepgram.com/v1/listen'
+    
+    url += f'?encoding={encoding}&sample_rate={sample_rate}&channels={channels}'
 
-    async with websockets.connect(url) as ws:
+    async with websockets.connect(url, extra_headers={
+            # If you're testing integration with DG, add your API key here
+            'Authorization': 'Token {}'.format('YOUR_DG_API_KEY')
+        }) as ws:
         print('🟢 (1/5) Successfully opened streaming connection')
 
         async def sender(ws):
@@ -58,10 +65,16 @@ async def audio_stream(audio_file_path, encoding, sample_rate, channels):
                     first_message = False
 
                 res = json.loads(msg)
+                # handle DG transcriptions, if we're streaming to DG instead of locally
+                transcript = res.get('channel', {})\
+                        .get('alternatives', [{}])[0]\
+                        .get('transcript', '')
                 if res.get('msg'):
                     # receive response from the server
                     print("Server message:", res.get('msg'))
-
+                elif transcript:
+                    print('DG transcript:', transcript)
+                    
                 if res.get('filename'):
                     raw_filename = f"{res.get('filename').split('.')[0]}.raw"
                     print(f"🟢 (5/5) Sent audio data was stored in {raw_filename}")
