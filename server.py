@@ -6,39 +6,44 @@ import pydub
 import json
 from io import BytesIO
 import os
+from datetime import datetime
 
-def save_audio(encoding, sample_rate, sample_width, channels, data):
-    # map the encoding to a pydub format
-    encoding_format_map = {
-        'linear16': 'wav',
-        'flac': 'flac',
-        'mulaw': 'mulaw',
-        'amr-nb': 'amr',
-        'amr-wb': 'amr',
-        'opus': 'ogg',
-        'speex': 'spx'
-    }
+encoding_samplewidth_map = {
+    'linear16': 2,
+    'mulaw': 1
+}
 
-    try:
-        extension = encoding_format_map[encoding]
-    except:
-        raise "ERROR: Unsupported encoding!"
-
-    # TODO timestamp this
-    filename = 'tmp'
-    with open(os.path.join('data', f'{filename}.raw'), 'wb') as file:
+def save_audio(encoding, sample_rate, channels, data):
+    # Save the raw audio data to a file
+    curr_time = datetime.now()
+    filename = curr_time.strftime('%Y%m%d_%H%M%S')
+    extension = 'raw'
+    with open(os.path.join('data', f'{filename}.{extension}'), 'wb') as file:
        file.write(data)
 
-    audio_segment = pydub.AudioSegment.from_raw(
-        BytesIO(data), 
-        sample_width=sample_width, 
-        channels=channels, 
-        frame_rate=sample_rate
-    )
-    audio_segment.export(
-        os.path.join('data', f'{filename}.{extension}'),
-        format=extension
-    )
+    # Save to a containerized file, 
+    # if using a format with a consistent bitrate
+    sample_width = encoding_samplewidth_map.get(encoding) 
+    if sample_width:
+        # map the encoding to a pydub format
+        encoding_format_map = {
+            'linear16': 'wav',
+            'mulaw': 'mulaw',
+        }
+
+        extension = encoding_format_map[encoding]
+        
+        audio_segment = pydub.AudioSegment.from_raw(
+            BytesIO(data), 
+            sample_width=sample_width, 
+            channels=channels, 
+            frame_rate=sample_rate
+        )
+
+        audio_segment.export(
+            os.path.join('data', f'{filename}.{extension}'),
+            format=extension
+        )
 
     return os.path.join('data', f'{filename}.{extension}')
 
@@ -58,18 +63,14 @@ async def audio_handler(websocket, path):
     sample_rate = int(parsed_path.get('sample_rate', [0])[0])
     channels = int(parsed_path.get('channels', [1])[0])
 
-    # TODO finish filling this out
-    encoding_samplewidth_map = {
-        'linear16': 2,
-        'mulaw': 1
-    }
-
     await logger(websocket, f"Expecting audio data with encoding {encoding}, {sample_rate} sample rate, and {channels} channel(s)")
 
-    sample_width = encoding_samplewidth_map[encoding]
-
-    # How many bytes are contained in one second of audio?
-    expected_bytes_per_second = sample_width * sample_rate * channels
+    # For audio formats with non-variable sample widths,
+    # we can do some calculations to confirm audio is being sent in real-time
+    sample_width = encoding_samplewidth_map.get(encoding)
+    if sample_width:
+        # How many bytes are contained in one second of audio?
+        expected_bytes_per_second = sample_width * sample_rate * channels
     
     start_time = time.time()
     bytes_received = 0
@@ -83,12 +84,13 @@ async def audio_handler(websocket, path):
                 bytes_received += len(message)
                 audio_data += message
                 
-                # calculate the elapsed time
-                elapsed_time = time.time() - start_time
-                # validate the data rate
-                if bytes_received / elapsed_time > expected_bytes_per_second:
-                    await websocket.close(code=1011, reason="Data rate too high")
-                    return
+                if sample_width:
+                    # calculate the elapsed time
+                    elapsed_time = time.time() - start_time
+                    # validate the data rate
+                    if bytes_received / elapsed_time > expected_bytes_per_second:
+                        await websocket.close(code=1011, reason="Data rate too high")
+                        return
                 await logger(websocket, f"Received {bytes_received} bytes of data")
 
             # handle stream closures or other text messages
@@ -96,7 +98,7 @@ async def audio_handler(websocket, path):
                 json_message = json.loads(message)
                 if json_message.get('type') == 'CloseStream':
                     # save the audio data to a file
-                    filename = save_audio(encoding, sample_rate, sample_width, channels, audio_data)
+                    filename = save_audio(encoding, sample_rate, channels, audio_data)
                     await logger(websocket, filename, 'filename')
                     await logger(websocket, len(audio_data), 'total_bytes')
                     return

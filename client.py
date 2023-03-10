@@ -8,18 +8,14 @@ REALTIME_RESOLUTION = 0.250
 
 encoding_samplewidth_map = {
     'linear16': 2,
-    'flac': 0,
-    'mulaw': 1,
-    'amr-nb': 0,
-    'amr-wb': 0,
-    'opus': 0,
-    'speex': 0
+    'mulaw': 1
 }
 
 async def audio_stream():
+    audio_file = "preamble.flac"
     # TODO consider changing these to CLI variables
-    data = open("preamble.raw", "rb").read()
-    encoding = "linear16"
+    data = open(audio_file, "rb").read()
+    encoding = "flac"
     sample_rate = 8000
     channels = 1
     expected_bytes = len(data)
@@ -32,12 +28,18 @@ async def audio_stream():
         async def sender(ws):
             print(f'🟢 (2/5) Ready to stream data')
             nonlocal data
-            # TODO make variable
-            sample_width = encoding_samplewidth_map[encoding]
-            # How many bytes are contained in one second of audio?
-            byte_rate = sample_width * sample_rate * channels
-            # How many bytes are in `REALTIME_RESOLUTION` seconds of audio?
-            chunk_size = int(byte_rate * REALTIME_RESOLUTION)
+
+            # For audio formats with non-variable sample widths,
+            # we can do some calculations and send audio in real-time
+            sample_width = encoding_samplewidth_map.get(encoding)
+            if sample_width:
+                # How many bytes are contained in one second of audio?
+                byte_rate = sample_width * sample_rate * channels
+                # How many bytes are in `REALTIME_RESOLUTION` seconds of audio?
+                chunk_size = int(byte_rate * REALTIME_RESOLUTION)
+            # Otherwise, we'll send an arbitrary chunk size
+            else:
+                chunk_size = 5000
 
             while len(data):
                 chunk, data = data[:chunk_size], data[chunk_size:]
@@ -65,8 +67,9 @@ async def audio_stream():
 
                 if res.get('filename'):
                     raw_filename = f"{res.get('filename').split('.')[0]}.raw"
-                    print(f"🟢 (5/5) Sent data was containerized and saved in {res.get('filename')}")
-                    print(f"🟢 (5/5) Raw data was stored in {raw_filename}")
+                    print(f"🟢 (5/5) Sent audio data was stored in {raw_filename}")
+                    if res.get('filename').split('.')[1] != 'raw':
+                        print(f"🟢 (5/5) Sent audo data was also containerized and saved in {res.get('filename')}")
 
                 # TODO consider if this functionality should be removed
                 # Since it only applies to file streaming and not true real-time caes 
