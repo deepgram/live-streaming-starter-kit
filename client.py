@@ -18,7 +18,6 @@ async def audio_stream():
     encoding = "flac"
     sample_rate = 8000
     channels = 1
-    expected_bytes = len(data)
 
     url = f"ws://localhost:5000?encoding={encoding}&sample_rate={sample_rate}&channels={channels}"
 
@@ -71,14 +70,6 @@ async def audio_stream():
                     if res.get('filename').split('.')[1] != 'raw':
                         print(f"🟢 (5/5) Sent audo data was also containerized and saved in {res.get('filename')}")
 
-                # TODO consider if this functionality should be removed
-                # Since it only applies to file streaming and not true real-time caes 
-                if res.get('total_bytes'):
-                    bytes_received = res.get('total_bytes')
-                    if bytes_received == expected_bytes:
-                        print(f"Server expected {expected_bytes} bytes of data and received all bytes")
-                    else:
-                        print(f"Error! Expected to send {expected_bytes} bytes of data, but server only received {bytes_received} bytes")
             return
             
         functions = [
