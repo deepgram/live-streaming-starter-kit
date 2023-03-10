@@ -89,8 +89,8 @@ async def audio_handler(websocket, path):
                     elapsed_time = time.time() - start_time
                     # validate the data rate
                     if bytes_received / elapsed_time > expected_bytes_per_second:
-                        await websocket.close(code=1011, reason="Data rate too high")
-                        return
+                        await logger(websocket, f"Warning: stream may be faster than real time!")
+                        
                 await logger(websocket, f"Received {bytes_received} bytes of data")
 
             # handle stream closures or other text messages
