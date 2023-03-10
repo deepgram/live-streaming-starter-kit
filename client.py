@@ -19,7 +19,7 @@ async def audio_stream(audio_file_path, encoding, sample_rate, channels):
 
     url = 'ws://localhost:5000'
     # To test integrating with DG, uncomment the following line (also, specify your API key below)
-    url = 'wss://api.deepgram.com/v1/listen'
+    # url = 'wss://api.deepgram.com/v1/listen'
     
     url += f'?encoding={encoding}&sample_rate={sample_rate}&channels={channels}'
 
