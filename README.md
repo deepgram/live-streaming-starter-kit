@@ -121,11 +121,11 @@ The test suite comes with a raw audio file, `preamble.raw` , that you can use to
 
 When you run the mock client, you should see output confirming that the mock server has begun to receive your audio.
 
-For a list of valid encodings, see [Deepgram's documentation]( https://developers.deepgram.com/documentation/features/encoding/).
+For a list of valid encodings, see [Deepgram's documentation](https://developers.deepgram.com/documentation/features/encoding/).
 
 ### Validate Your Audio
 
-At the end of an audio stream, the mock server saves all audio data that was sent in a timestamped RAW file. It will return the filename to you at the end of the stream.
+At the end of an audio stream, the mock server saves all audio data that was sent in a RAW file. It will return the filename to you at the end of the stream.
 
 You need to ensure the audio the server received is the audio you intended to send. To validate this, open this file in a program like Audacity (specifying necessary parameters like the encoding and sample rate) and try to play it back. You should be able to listen to your audio and verify it's correct.
 
