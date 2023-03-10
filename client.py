@@ -115,7 +115,7 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(description='Submits data to the real-time streaming endpoint.')
     parser.add_argument('-i', '--input', help='The path to the raw audio file to stream. Defaults to the included file preamble.raw', default='preamble.raw', type=validate_input)
-    parser.add_argument('-e', '--encoding', help='The encoding for the raw audio file.', default='linear16', type=validate_encoding)
+    parser.add_argument('-e', '--encoding', choices=['linear16', 'flac', 'mulaw', 'amr-nb', 'amr-wb', 'opus', 'speex'], help='The encoding for the raw audio file.', default='linear16', type=validate_encoding)
     parser.add_argument('-s', '--sample_rate', help='The sample rate for the raw audio file.', default=8000)
     parser.add_argument('-c', '--channels', help='The number of channels in the raw audio file.', default=1)
     return parser.parse_args()
