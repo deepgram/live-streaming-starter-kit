@@ -1,4 +1,7 @@
+import argparse
 import asyncio
+import os
+import sys
 import websockets
 import json
 
@@ -11,13 +14,8 @@ encoding_samplewidth_map = {
     'mulaw': 1
 }
 
-async def audio_stream():
-    audio_file = "preamble.flac"
-    # TODO consider changing these to CLI variables
-    data = open(audio_file, "rb").read()
-    encoding = "flac"
-    sample_rate = 8000
-    channels = 1
+async def audio_stream(audio_file_path, encoding, sample_rate, channels):
+    data = open(audio_file_path, "rb").read()
 
     url = f"ws://localhost:5000?encoding={encoding}&sample_rate={sample_rate}&channels={channels}"
 
@@ -78,8 +76,49 @@ async def audio_stream():
         ]
         await asyncio.gather(*functions)
 
-if __name__ == '__main__':
+def validate_input(input):
+    if os.path.exists(input):
+        return input
+        
+    raise argparse.ArgumentTypeError(f'{input} is an invalid file path.')
+
+def validate_encoding(encoding):
+    dg_encodings = [
+        'linear16',
+        'flac',
+        'mulaw',
+        'amr-nb',
+        'amr-wb',
+        'opus',
+        'speex'
+    ]
+    if encoding in dg_encodings:
+        return encoding
+    
+    raise argparse.ArgumentTypeError(f'{encoding} is not a supported encoding. For a list of supported encodings, see https://developers.deepgram.com/documentation/features/encoding/')
+
+def parse_args():
+    """ Parses the command-line arguments.
+    """
+    parser = argparse.ArgumentParser(description='Submits data to the real-time streaming endpoint.')
+    parser.add_argument('-i', '--input', help='The path to the raw audio file to stream. Defaults to the included file preamble.raw', nargs='?', const=1, default='preamble.raw', type=validate_input)
+    parser.add_argument('-e', '--encoding', help='The encoding for the raw audio file.', nargs='?', const=1, default='linear16', type=validate_encoding)
+    parser.add_argument('-s', '--sample_rate', help='The sample rate for the raw audio file.', nargs='?', const=1, default=8000)
+    parser.add_argument('-c', '--channels', help='The number of channels in the raw audio file.', nargs='?', const=1, default=1)
+    return parser.parse_args()
+
+def main():
+    # Parse the command-line arguments.
+    args = parse_args()
+    input = args.input
+    encoding = args.encoding.lower()
+    sample_rate = int(args.sample_rate)
+    channels = int(args.channels)
+
     try:
-        asyncio.get_event_loop().run_until_complete(audio_stream())
+        asyncio.get_event_loop().run_until_complete(audio_stream(input, encoding, sample_rate, channels))
     except websockets.exceptions.InvalidStatusCode as e:
         print(f'🔴 ERROR: Could not connect to server! {e}')
+    
+if __name__ == '__main__':
+    sys.exit(main() or 0)
