@@ -69,8 +69,9 @@ async def audio_stream(audio_file_path, encoding, sample_rate, channels):
                 transcript = res.get('channel', {})\
                         .get('alternatives', [{}])[0]\
                         .get('transcript', '')
+                
+                # handle local server messages, if we're streaming to our local server
                 if res.get('msg'):
-                    # receive response from the server
                     print("Server message:", res.get('msg'))
                 elif transcript:
                     print('DG transcript:', transcript)
