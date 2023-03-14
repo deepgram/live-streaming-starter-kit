@@ -23,7 +23,7 @@ You must have:
 ### Installation
 
 1. Check out the [streaming test suite](https://github.com/deepgram/streaming-test-suite/) repository
-2. `pip install requirements.txt` 
+2. `pip install -r requirements.txt` 
 
 ## Streaming a Local Source
 
