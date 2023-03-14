@@ -80,7 +80,7 @@ async def audio_stream(audio_file_path, encoding, sample_rate, channels):
                     raw_filename = f"{res.get('filename').split('.')[0]}.raw"
                     print(f"🟢 (5/5) Sent audio data was stored in {raw_filename}")
                     if res.get('filename').split('.')[1] != 'raw':
-                        print(f"🟢 (5/5) Sent audo data was also containerized and saved in {res.get('filename')}")
+                        print(f"🟢 (5/5) Sent audio data was also containerized and saved in {res.get('filename')}")
 
             return
             
