@@ -18,6 +18,10 @@ def save_audio(encoding, sample_rate, channels, data):
     curr_time = datetime.now()
     filename = curr_time.strftime('%Y%m%d_%H%M%S')
     extension = 'raw'
+    data_dir = os.path.abspath(os.path.join(os.path.curdir, 'data'))
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+
     with open(os.path.join('data', f'{filename}.{extension}'), 'wb') as file:
        file.write(data)
 
