@@ -77,9 +77,9 @@ async def audio_stream(audio_file_path, encoding, sample_rate, channels):
 
                 # handle local server messages, if we're streaming to our local server
                 if res.get("msg"):
-                    print("Server message:", res.get("msg"))
+                    print(f"Server message: {res.get('msg')}")
                 elif transcript:
-                    print("DG transcript:", transcript)
+                    print(f"DG transcript: {transcript}")
 
                 if res.get("filename"):
                     raw_filename = f"{res.get('filename').split('.')[0]}.raw"
