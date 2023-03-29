@@ -27,13 +27,9 @@ def save_audio(encoding, sample_rate, channels, data):
     # if using a format with a consistent bitrate
     sample_width = encoding_samplewidth_map.get(encoding)
     if sample_width:
-        # map the encoding to a pydub format
-        encoding_format_map = {
-            "linear16": "wav",
-            "mulaw": "mulaw",
-        }
-
-        extension = encoding_format_map[encoding]
+        # we only support linear16 and mulaw right now
+        # both of these can be waved as wav files
+        extension = "wav"
 
         audio_segment = pydub.AudioSegment.from_raw(
             BytesIO(data),
