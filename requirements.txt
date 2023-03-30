@@ -1,0 +1,4 @@
+aiohttp==3.7.4.post0
+PyAudio==0.2.12
+pydub==0.25.1
+websockets==10.3
