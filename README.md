@@ -25,7 +25,8 @@ You must have:
 ### Installation
 
 1. Clone the [streaming test suite](https://github.com/deepgram/streaming-test-suite/) repository
-2. `pip install -r requirements.txt` 
+1. Install [portaudio](http://portaudio.com/), if it is not already installed
+1. `pip install -r requirements.txt` 
 
 ## 1. Streaming a Local Source
 
