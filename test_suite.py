@@ -69,7 +69,7 @@ def mic_callback(input_data, frame_count, time_info, status_flag):
 
 
 async def run(key, method, format, **kwargs):
-    deepgram_url = "wss://api.deepgram.com/v1/listen?punctuate=true"
+    deepgram_url = f'{kwargs["host"]}/v1/listen?punctuate=true'
 
     if method == "mic":
         deepgram_url += "&encoding=linear16&sample_rate=16000"
@@ -293,6 +293,17 @@ def validate_format(format):
         f'{format} is invalid. Please enter "text", "vtt", or "srt".'
     )
 
+def validate_dg_host(dg_host):
+    if (
+        #Check that the host contains "wss://" or "ws://"
+        dg_host.startswith("wss://")
+        or dg_host.startswith("ws://")
+    ):
+        return dg_host 
+
+    raise argparse.ArgumentTypeError(
+            f'{dg_host} is invalid. Please provide the "{{wss|ws}}://hostname[:port]".'
+    )
 
 def parse_args():
     """Parses the command-line arguments."""
@@ -319,6 +330,15 @@ def parse_args():
         const=1,
         default="text",
         type=validate_format,
+    )
+    #Parse the host
+    parser.add_argument(
+        "--host",
+        help='Point the test suite at a particular Deepgram URL. Takes "{{wss|ws}}://hostname[:port]" as its value, defaults to "wss://api.deepgram.com".',
+        nargs="?",
+        const=1,
+        default="wss://api.deepgram.com",
+        type=validate_dg_host,
     )
     return parser.parse_args()
 
@@ -358,6 +378,7 @@ def main():
                             sample_width=sample_width,
                             sample_rate=sample_rate,
                             filepath=args.input,
+                            host=args.host,
                         )
                     )
             else:
