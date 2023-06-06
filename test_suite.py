@@ -349,10 +349,11 @@ def main():
     args = parse_args()
     input = args.input
     format = args.format.lower()
+    host = args.host
 
     try:
         if input.lower().startswith("mic"):
-            asyncio.run(run(args.key, "mic", format))
+            asyncio.run(run(args.key, "mic", format, host=host))
 
         elif input.lower().endswith("wav"):
             if os.path.exists(input):
@@ -378,7 +379,7 @@ def main():
                             sample_width=sample_width,
                             sample_rate=sample_rate,
                             filepath=args.input,
-                            host=args.host,
+                            host=host,
                         )
                     )
             else:
@@ -387,7 +388,7 @@ def main():
                 )
 
         elif input.lower().startswith("http"):
-            asyncio.run(run(args.key, "url", format, url=input))
+            asyncio.run(run(args.key, "url", format, url=input, host=host))
 
         else:
             raise argparse.ArgumentTypeError(
