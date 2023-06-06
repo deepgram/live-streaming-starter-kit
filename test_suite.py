@@ -302,7 +302,7 @@ def validate_dg_host(dg_host):
         return dg_host 
 
     raise argparse.ArgumentTypeError(
-            f'{dg_host} is invalid. Please provide the "{{wss|ws}}://hostname[:port]".'
+            f'{dg_host} is invalid. Please provide a WebSocket URL in the format "{{wss|ws}}://hostname[:port]".'
     )
 
 def parse_args():
@@ -334,7 +334,7 @@ def parse_args():
     #Parse the host
     parser.add_argument(
         "--host",
-        help='Point the test suite at a particular Deepgram URL. Takes "{{wss|ws}}://hostname[:port]" as its value, defaults to "wss://api.deepgram.com".',
+        help='Point the test suite at a specific Deepgram URL (useful for on-prem deployments). Takes "{{wss|ws}}://hostname[:port]" as its value. Defaults to "wss://api.deepgram.com".',
         nargs="?",
         const=1,
         default="wss://api.deepgram.com",
