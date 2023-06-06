@@ -295,10 +295,13 @@ def validate_format(format):
 
 def validate_dg_host(dg_host):
     if (
-        #Check that the host contains "wss://" or "ws://"
+        # Check that the host is a websocket URL
         dg_host.startswith("wss://")
         or dg_host.startswith("ws://")
     ):
+        # Trim trailing slash if necessary
+        if dg_host[-1] == '/':
+            return dg_host[:-1]
         return dg_host 
 
     raise argparse.ArgumentTypeError(
