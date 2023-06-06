@@ -59,6 +59,10 @@ You can also stream your own WAV file by running:
 
 To check out how this functionality is implemented, look at the conditional `elif method == 'wav'` in our `sender` function.
 
+<Alert type="info">
+Running an on-prem Deepgram deployment? You can provide your custom URL to the test suite with the `--host` argument.
+</Alert>
+
 ### Stream Your Microphone
 
 The streaming test suite also has the ability to send audio from your microphone to Deepgram for transcription. 
