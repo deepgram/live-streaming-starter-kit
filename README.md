@@ -19,14 +19,16 @@ With our streaming test suite, you can feel confident that you are laying a soli
 You must have:
 
 - Python >= 3.6+
-- [portaudio](http://portaudio.com/), if you plan to stream audio from your microphone
+- [portaudio](http://portaudio.com/)
 - A valid Deepgram API key (you can create one in our [Console](https://console.deepgram.com/))
 
 ### Installation
 
 1. Clone the [streaming test suite](https://github.com/deepgram/streaming-test-suite/) repository
 1. Install [portaudio](http://portaudio.com/), if it is not already installed
-1. `pip install -r requirements.txt` 
+1. `pip install -r requirements.txt`
+
+A note on installing PortAudio: if you use brew or conda, we recommend installing with `brew install portaudio` or `conda install portaudio`. Otherwise, you can download a zip file from [portaudio.com](http://portaudio.com/), unzip it, and then consult [PortAudio's docs](http://www.portaudio.com/docs/v19-doxydocs/pages.html) as a reference for how to build the package on your operating system. For Linux and MacOS, the build command within the top-level `portaudio/` directory is `./configure && make`.
 
 ## 1. Streaming a Local Source
 
