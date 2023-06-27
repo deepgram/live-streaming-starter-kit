@@ -96,17 +96,16 @@ The next step in getting started with Deepgram's audio streaming capabilities is
 
 Make sure you have the URL for direct audio stream to test with. A good way of testing this is to open the URL in a browser—you should see just the built-in browser audio player without an accompanying web page.
 
-Here are a few URLs for you to try:
+Here are two URLs for you to try:
 
-- BBC Radio 4 (outside the UK): http://stream.live.vc.bbcmedia.co.uk/bbc_radio_fourlw_online_nonuk
-- BBC Radio 4 (inside the UK): http://stream.live.vc.bbcmedia.co.uk/bbc_radio_fourfm
+- BBC World Service: http://stream.live.vc.bbcmedia.co.uk/bbc_world_service
 - France Inter: https://direct.franceinter.fr/live/franceinter-midfi.mp3
 
 If you use the French channel, be sure to add `language=fr` to your Deepgram URL.
 
 Then, run the test suite to see the results:
 
-`python test_suite.py -k YOUR_DEEPGRAM_API_KEY -i http://stream.live.vc.bbcmedia.co.uk/bbc_radio_fourlw_online_nonuk`
+`python test_suite.py -k YOUR_DEEPGRAM_API_KEY -i http://stream.live.vc.bbcmedia.co.uk/bbc_world_service`
 
 To check out how this functionality is implemented, look at the conditional `elif method == url` in our `sender` function. We use the `aiohttp` library to make an asynchronous request and open a session, then send content to Deepgram.
 
