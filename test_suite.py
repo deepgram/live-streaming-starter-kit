@@ -43,21 +43,16 @@ def subtitle_formatter(response, format):
 
     start = response["start"]
     end = start + response["duration"]
-    transcript = (
-        response.get("channel", {}).get("alternatives", [{}])[0].get("transcript", "")
+    transcript = response.get("channel", {}).get("alternatives", [{}])[0].get("transcript", "")
+
+    separator = "," if format == "srt" else '.'
+    prefix = "- " if format == "vtt" else ""
+    subtitle_string = (
+        f"{subtitle_line_counter}\n"
+        f"{subtitle_time_formatter(start, separator)} --> "
+        f"{subtitle_time_formatter(end, separator)}\n"
+        f"{prefix}{transcript}\n\n"
     )
-
-    if format == "srt":
-        separator = ","
-    else:
-        separator = "."
-
-    subtitle_string = f"{subtitle_line_counter}\n"
-    subtitle_string += f"{subtitle_time_formatter(start, separator)} --> "
-    subtitle_string += f"{subtitle_time_formatter(end, separator)}\n"
-    if format == "vtt":
-        subtitle_string += "- "
-    subtitle_string += f"{transcript}\n\n"
 
     return subtitle_string
 

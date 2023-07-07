@@ -78,9 +78,9 @@ First, make sure [pyaudio](https://pypi.org/project/PyAudio/) and its [portaudio
 
 In addition to printing transcripts to the terminal, the test suite can also wrap Deepgram's responses in two common subtitle formats, SRT or VTT. 
 
-To generate SRT or VTT files, add the `-o/--output` parameter when running the test suite:
+To generate SRT or VTT files, add the `-f/--format` parameter when running the test suite:
 
-`python test_suite.py -k YOUR_DEEPGRAM_API_KEY [-i mic|/path/to/audio.wav] [-o text|vtt|srt]`
+`python test_suite.py -k YOUR_DEEPGRAM_API_KEY [-i mic|/path/to/audio.wav] [-f text|vtt|srt]`
 
 This parameter defaults to `text`, which outputs responses to your terminal.
 
