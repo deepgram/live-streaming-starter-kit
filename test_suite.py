@@ -63,8 +63,14 @@ def mic_callback(input_data, frame_count, time_info, status_flag):
     return (input_data, pyaudio.paContinue)
 
 
-async def run(key, method, format, **kwargs):
+async def run(key, method, format, model, tier, **kwargs):
     deepgram_url = f'{kwargs["host"]}/v1/listen?punctuate=true'
+
+    if model:
+        deepgram_url += f"&model={model}"
+
+    if tier:
+        deepgram_url += f"&tier={tier}"
 
     if method == "mic":
         deepgram_url += "&encoding=linear16&sample_rate=16000"
@@ -78,6 +84,10 @@ async def run(key, method, format, **kwargs):
         deepgram_url, extra_headers={"Authorization": "Token {}".format(key)}
     ) as ws:
         print(f'ℹ️  Request ID: {ws.response_headers.get("dg-request-id")}')
+        if model:
+            print(f'ℹ️  Model: {model}')
+        if tier:
+            print(f'ℹ️  Tier: {tier}')
         print("🟢 (1/5) Successfully opened Deepgram streaming connection")
 
         async def sender(ws):
@@ -164,6 +174,11 @@ async def run(key, method, format, **kwargs):
                             .get("alternatives", [{}])[0]
                             .get("transcript", "")
                         )
+                        if kwargs["timestamps"]:
+                            words = res.get("channel", {}).get("alternatives", [{}])[0].get("words", [])
+                            start = words[0]["start"] if words else None
+                            end = words[-1]["end"] if words else None
+                            transcript += " [{} - {}]".format(start, end) if (start and end) else ""
                         if transcript != "":
                             if first_transcript:
                                 print("🟢 (4/5) Began receiving transcription")
@@ -288,6 +303,20 @@ def validate_format(format):
         f'{format} is invalid. Please enter "text", "vtt", or "srt".'
     )
 
+def validate_model(model):
+    models = ["general", "phonecall", "meeting", "finance", "voicemail", "conversationalai", "video", "nova"]
+    if "whisper" in model.lower():
+        raise argparse.ArgumentTypeError(f'Whisper is not supported for streaming. Please use {", ".join(models)}.')
+    if model and model.lower() not in models:
+        raise argparse.ArgumentTypeError(f'{model} is an invalid tier. Please use {", ".join(models)}.')
+    return model.lower()
+
+def validate_tier(tier):
+    tiers = ["base", "enhanced", "nova"]
+    if tier and tier.lower() not in tiers:
+        raise argparse.ArgumentTypeError(f'{tier} is an invalid tier. Please use {", ".join(tiers)}.')
+    return tier.lower()
+
 def validate_dg_host(dg_host):
     if (
         # Check that the host is a websocket URL
@@ -321,6 +350,32 @@ def parse_args():
         type=validate_input,
     )
     parser.add_argument(
+        "-m",
+        "--model",
+        help='Which model to make your request against. Defaults to none specified. See https://developers.deepgram.com/docs/models-overview for all model options.',
+        nargs="?",
+        const="",
+        default="",
+        type=validate_model,
+    )
+    parser.add_argument(
+        "-t",
+        "--tier",
+        help='Which model tier to make your request against. Defaults to none specified. See https://developers.deepgram.com/docs/tier for all tier options.',
+        nargs="?",
+        const="",
+        default="",
+        type=validate_tier,
+    )
+    parser.add_argument(
+        "-ts",
+        "--timestamps",
+        help='Whether to include timestamps in the printed streaming transcript. Defaults to False.',
+        nargs="?",
+        const=1,
+        default=False,
+    )
+    parser.add_argument(
         "-f",
         "--format",
         help='Format for output. Can be "text" to return plain text, "VTT", or "SRT". If set to VTT or SRT, the audio file and subtitle file will be saved to the data/ directory. Defaults to "text".',
@@ -351,7 +406,7 @@ def main():
 
     try:
         if input.lower().startswith("mic"):
-            asyncio.run(run(args.key, "mic", format, host=host))
+            asyncio.run(run(args.key, "mic", format, args.model, args.tier, host=host, timestamps=args.timestamps))
 
         elif input.lower().endswith("wav"):
             if os.path.exists(input):
@@ -372,12 +427,15 @@ def main():
                             args.key,
                             "wav",
                             format,
+                            args.model,
+                            args.tier,
                             data=data,
                             channels=channels,
                             sample_width=sample_width,
                             sample_rate=sample_rate,
                             filepath=args.input,
                             host=host,
+                            timestamps=args.timestamps,
                         )
                     )
             else:
@@ -386,7 +444,7 @@ def main():
                 )
 
         elif input.lower().startswith("http"):
-            asyncio.run(run(args.key, "url", format, url=input, host=host))
+            asyncio.run(run(args.key, "url", format, args.model, args.tier, url=input, host=host, timestamps=args.timestamps))
 
         else:
             raise argparse.ArgumentTypeError(
