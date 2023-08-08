@@ -63,14 +63,14 @@ def mic_callback(input_data, frame_count, time_info, status_flag):
     return (input_data, pyaudio.paContinue)
 
 
-async def run(key, method, format, model, tier, **kwargs):
+async def run(key, method, format, **kwargs):
     deepgram_url = f'{kwargs["host"]}/v1/listen?punctuate=true'
 
-    if model:
-        deepgram_url += f"&model={model}"
+    if kwargs["model"]:
+        deepgram_url += f"&model={kwargs['model']}"
 
-    if tier:
-        deepgram_url += f"&tier={tier}"
+    if kwargs["tier"]:
+        deepgram_url += f"&tier={kwargs['tier']}"
 
     if method == "mic":
         deepgram_url += "&encoding=linear16&sample_rate=16000"
@@ -84,10 +84,10 @@ async def run(key, method, format, model, tier, **kwargs):
         deepgram_url, extra_headers={"Authorization": "Token {}".format(key)}
     ) as ws:
         print(f'ℹ️  Request ID: {ws.response_headers.get("dg-request-id")}')
-        if model:
-            print(f'ℹ️  Model: {model}')
-        if tier:
-            print(f'ℹ️  Tier: {tier}')
+        if kwargs["model"]:
+            print(f'ℹ️  Model: {kwargs["model"]}')
+        if kwargs["tier"]:
+            print(f'ℹ️  Tier: {kwargs["tier"]}')
         print("🟢 (1/5) Successfully opened Deepgram streaming connection")
 
         async def sender(ws):
@@ -303,20 +303,6 @@ def validate_format(format):
         f'{format} is invalid. Please enter "text", "vtt", or "srt".'
     )
 
-def validate_model(model):
-    models = ["general", "phonecall", "meeting", "finance", "voicemail", "conversationalai", "video", "nova"]
-    if "whisper" in model.lower():
-        raise argparse.ArgumentTypeError(f'Whisper is not supported for streaming. Please use {", ".join(models)}.')
-    if model and model.lower() not in models:
-        raise argparse.ArgumentTypeError(f'{model} is an invalid tier. Please use {", ".join(models)}.')
-    return model.lower()
-
-def validate_tier(tier):
-    tiers = ["base", "enhanced", "nova"]
-    if tier and tier.lower() not in tiers:
-        raise argparse.ArgumentTypeError(f'{tier} is an invalid tier. Please use {", ".join(tiers)}.')
-    return tier.lower()
-
 def validate_dg_host(dg_host):
     if (
         # Check that the host is a websocket URL
@@ -355,8 +341,7 @@ def parse_args():
         help='Which model to make your request against. Defaults to none specified. See https://developers.deepgram.com/docs/models-overview for all model options.',
         nargs="?",
         const="",
-        default="",
-        type=validate_model,
+        default="general",
     )
     parser.add_argument(
         "-t",
@@ -365,7 +350,6 @@ def parse_args():
         nargs="?",
         const="",
         default="",
-        type=validate_tier,
     )
     parser.add_argument(
         "-ts",
@@ -406,7 +390,7 @@ def main():
 
     try:
         if input.lower().startswith("mic"):
-            asyncio.run(run(args.key, "mic", format, args.model, args.tier, host=host, timestamps=args.timestamps))
+            asyncio.run(run(args.key, "mic", format, model=args.model, tier=args.tier, host=host, timestamps=args.timestamps))
 
         elif input.lower().endswith("wav"):
             if os.path.exists(input):
@@ -427,8 +411,8 @@ def main():
                             args.key,
                             "wav",
                             format,
-                            args.model,
-                            args.tier,
+                            model=args.model,
+                            tier=args.tier,
                             data=data,
                             channels=channels,
                             sample_width=sample_width,
@@ -444,7 +428,7 @@ def main():
                 )
 
         elif input.lower().startswith("http"):
-            asyncio.run(run(args.key, "url", format, args.model, args.tier, url=input, host=host, timestamps=args.timestamps))
+            asyncio.run(run(args.key, "url", format, model=args.model, tier=args.tier, url=input, host=host, timestamps=args.timestamps))
 
         else:
             raise argparse.ArgumentTypeError(
