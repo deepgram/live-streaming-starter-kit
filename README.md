@@ -30,16 +30,6 @@ You must have:
 
 A note on installing PortAudio: if you use brew or conda, we recommend installing with `brew install portaudio` or `conda install portaudio`. Otherwise, you can download a zip file from [portaudio.com](http://portaudio.com/), unzip it, and then consult [PortAudio's docs](http://www.portaudio.com/docs/v19-doxydocs/pages.html) as a reference for how to build the package on your operating system. For Linux and MacOS, the build command within the top-level `portaudio/` directory is `./configure && make`.
 
-### Additional Options
-
-The following arguments can be appended to any test suite command.
-
-`--model/-m`: Specify a Deepgram model. Example: `--model general`
-
-`--tier/-t`: Specify a Deepgram model tier. Example: `--tier nova`
-
-`--timestamps/-ts`: Opt-in to printing start and end timestamps for each streaming response. Example: `--timestamps`
-
 ## 1. Streaming a Local Source
 
 The first step in getting started with Deepgram's audio streaming capabilities is to learn how to stream a local audio source to Deepgram. This simple task allows you to learn the basic concepts of how Deepgram's API works without worrying about complexities that arise with other audio sources. Additionally, it ensures that you can receive results from Deepgram in your development environment.
@@ -84,7 +74,27 @@ First, make sure [pyaudio](https://pypi.org/project/PyAudio/) and its [portaudio
 
 `python test_suite.py -k YOUR_DEEPGRAM_API_KEY -i mic`
 
-## Subtitle Generation
+## Additional Options
+
+The following arguments can be appended to any test suite command.
+
+### Parameters
+
+`--model/-m`: Specify a Deepgram model. Example: `--model phonecall`. Defaults to `general`.
+
+`--tier/-t`: Specify a Deepgram model tier. Example: `--tier nova`. Defaults to none specified.
+
+### Timestamps
+
+`--timestamps/-ts`: Opt-in to printing start and end timestamps in seconds for each streaming response. Example: `--timestamps`
+
+Sample output line with timestamps:
+
+```
+In order to form a more perfect union, [2.5 - 4.26]
+```
+
+### Subtitle Generation
 
 In addition to printing transcripts to the terminal, the test suite can also wrap Deepgram's responses in two common subtitle formats, SRT or VTT. 
 
