@@ -74,7 +74,27 @@ First, make sure [pyaudio](https://pypi.org/project/PyAudio/) and its [portaudio
 
 `python test_suite.py -k YOUR_DEEPGRAM_API_KEY -i mic`
 
-## Subtitle Generation
+## Additional Options
+
+The following arguments can be appended to any test suite command.
+
+### Parameters
+
+`--model/-m`: Specify a Deepgram model. Example: `--model phonecall`. Defaults to `general`.
+
+`--tier/-t`: Specify a Deepgram model tier. Example: `--tier nova`. Defaults to none specified.
+
+### Timestamps
+
+`--timestamps/-ts`: Opt-in to printing start and end timestamps in seconds for each streaming response. Example: `--timestamps`
+
+Sample output line with timestamps:
+
+```
+In order to form a more perfect union, [2.5 - 4.26]
+```
+
+### Subtitle Generation
 
 In addition to printing transcripts to the terminal, the test suite can also wrap Deepgram's responses in two common subtitle formats, SRT or VTT. 
 

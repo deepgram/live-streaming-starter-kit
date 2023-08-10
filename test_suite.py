@@ -66,6 +66,12 @@ def mic_callback(input_data, frame_count, time_info, status_flag):
 async def run(key, method, format, **kwargs):
     deepgram_url = f'{kwargs["host"]}/v1/listen?punctuate=true'
 
+    if kwargs["model"]:
+        deepgram_url += f"&model={kwargs['model']}"
+
+    if kwargs["tier"]:
+        deepgram_url += f"&tier={kwargs['tier']}"
+
     if method == "mic":
         deepgram_url += "&encoding=linear16&sample_rate=16000"
 
@@ -78,6 +84,10 @@ async def run(key, method, format, **kwargs):
         deepgram_url, extra_headers={"Authorization": "Token {}".format(key)}
     ) as ws:
         print(f'ℹ️  Request ID: {ws.response_headers.get("dg-request-id")}')
+        if kwargs["model"]:
+            print(f'ℹ️  Model: {kwargs["model"]}')
+        if kwargs["tier"]:
+            print(f'ℹ️  Tier: {kwargs["tier"]}')
         print("🟢 (1/5) Successfully opened Deepgram streaming connection")
 
         async def sender(ws):
@@ -164,6 +174,11 @@ async def run(key, method, format, **kwargs):
                             .get("alternatives", [{}])[0]
                             .get("transcript", "")
                         )
+                        if kwargs["timestamps"]:
+                            words = res.get("channel", {}).get("alternatives", [{}])[0].get("words", [])
+                            start = words[0]["start"] if words else None
+                            end = words[-1]["end"] if words else None
+                            transcript += " [{} - {}]".format(start, end) if (start and end) else ""
                         if transcript != "":
                             if first_transcript:
                                 print("🟢 (4/5) Began receiving transcription")
@@ -321,6 +336,30 @@ def parse_args():
         type=validate_input,
     )
     parser.add_argument(
+        "-m",
+        "--model",
+        help='Which model to make your request against. Defaults to none specified. See https://developers.deepgram.com/docs/models-overview for all model options.',
+        nargs="?",
+        const="",
+        default="general",
+    )
+    parser.add_argument(
+        "-t",
+        "--tier",
+        help='Which model tier to make your request against. Defaults to none specified. See https://developers.deepgram.com/docs/tier for all tier options.',
+        nargs="?",
+        const="",
+        default="",
+    )
+    parser.add_argument(
+        "-ts",
+        "--timestamps",
+        help='Whether to include timestamps in the printed streaming transcript. Defaults to False.',
+        nargs="?",
+        const=1,
+        default=False,
+    )
+    parser.add_argument(
         "-f",
         "--format",
         help='Format for output. Can be "text" to return plain text, "VTT", or "SRT". If set to VTT or SRT, the audio file and subtitle file will be saved to the data/ directory. Defaults to "text".',
@@ -351,7 +390,7 @@ def main():
 
     try:
         if input.lower().startswith("mic"):
-            asyncio.run(run(args.key, "mic", format, host=host))
+            asyncio.run(run(args.key, "mic", format, model=args.model, tier=args.tier, host=host, timestamps=args.timestamps))
 
         elif input.lower().endswith("wav"):
             if os.path.exists(input):
@@ -372,12 +411,15 @@ def main():
                             args.key,
                             "wav",
                             format,
+                            model=args.model,
+                            tier=args.tier,
                             data=data,
                             channels=channels,
                             sample_width=sample_width,
                             sample_rate=sample_rate,
                             filepath=args.input,
                             host=host,
+                            timestamps=args.timestamps,
                         )
                     )
             else:
@@ -386,7 +428,7 @@ def main():
                 )
 
         elif input.lower().startswith("http"):
-            asyncio.run(run(args.key, "url", format, url=input, host=host))
+            asyncio.run(run(args.key, "url", format, model=args.model, tier=args.tier, url=input, host=host, timestamps=args.timestamps))
 
         else:
             raise argparse.ArgumentTypeError(
