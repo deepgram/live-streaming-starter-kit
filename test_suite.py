@@ -1,26 +1,30 @@
-import pyaudio
 import argparse
-import asyncio
-import aiohttp
-import json
 import os
 import sys
 import wave
+import threading
+import httpx
 import websockets
+from time import sleep
+from deepgram import (
+    DeepgramClient,
+    DeepgramClientOptions,
+    LiveOptions,
+    LiveTranscriptionEvents,
+    Microphone,
+)
 
 from datetime import datetime
 
 startTime = datetime.now()
 
-all_mic_data = []
+# entire transcription contents
 all_transcripts = []
 
-FORMAT = pyaudio.paInt16
+# constants
 CHANNELS = 1
 RATE = 16000
 CHUNK = 8000
-
-audio_queue = asyncio.Queue()
 
 # Mimic sending a real-time stream by sending this many seconds of audio at a time.
 # Used for file "streaming" only.
@@ -41,11 +45,11 @@ def subtitle_formatter(response, format):
     global subtitle_line_counter
     subtitle_line_counter += 1
 
-    start = response["start"]
-    end = start + response["duration"]
-    transcript = response.get("channel", {}).get("alternatives", [{}])[0].get("transcript", "")
+    start = response.start
+    end = start + response.duration
+    transcript = response.channel.alternatives[0].transcript
 
-    separator = "," if format == "srt" else '.'
+    separator = "," if format == "srt" else "."
     prefix = "- " if format == "vtt" else ""
     subtitle_string = (
         f"{subtitle_line_counter}\n"
@@ -57,222 +61,180 @@ def subtitle_formatter(response, format):
     return subtitle_string
 
 
-# Used for microphone streaming only.
-def mic_callback(input_data, frame_count, time_info, status_flag):
-    audio_queue.put_nowait(input_data)
-    return (input_data, pyaudio.paContinue)
+def run(key, method, format, **kwargs):
+    if key == "":
+        print(
+            "[WARNING] API Key not set... will attempt to use DEEPGRAM_API_KEY environment variable."
+        )
 
+    config = DeepgramClientOptions(url=kwargs["host"], options={"keepalive": "true"})
+    deepgram = DeepgramClient(key, config)
 
-async def run(key, method, format, **kwargs):
-    deepgram_url = f'{kwargs["host"]}/v1/listen?punctuate=true'
+    encoding = ""
+    sample_rate = ""
+    if method == "mic" or method == "wav":
+        encoding = "linear16"
+        sample_rate = kwargs["sample_rate"]
 
-    if kwargs["model"]:
-        deepgram_url += f"&model={kwargs['model']}"
+    options = LiveOptions(
+        punctuate=True,
+        language="en-US",
+        encoding=encoding,
+        channels=kwargs["channels"],
+        sample_rate=sample_rate,
+        model=kwargs["model"],
+        tier=kwargs["tier"],
+    )
 
-    if kwargs["tier"]:
-        deepgram_url += f"&tier={kwargs['tier']}"
+    def on_message(self, result, **kwargs):
+        if result is None:
+            return
+        if self.first_message:
+            print(
+                "🟢 (3/5) Successfully receiving Deepgram messages, waiting for finalized transcription..."
+            )
+            self.first_message = False
+
+        transcript = result.channel.alternatives[0].transcript
+        if kwargs["timestamps"]:
+            words = result.channel.alternatives[0].words
+            start = words[0]["start"] if words else None
+            end = words[-1]["end"] if words else None
+            transcript += " [{} - {}]".format(start, end) if (start and end) else ""
+        if transcript != "":
+            if self.first_transcript:
+                print("🟢 (4/5) Began receiving transcription")
+                # if using webvtt, print out header
+                if format == "vtt":
+                    print("WEBVTT\n")
+                self.first_transcript = False
+            if format == "vtt" or format == "srt":
+                transcript = subtitle_formatter(result, format)
+            transcript = subtitle_formatter(result, format == "srt")
+            print(transcript)
+
+            all_transcripts.append(transcript)
+
+    def on_metadata(self, metadata, **kwargs):
+        if metadata is None:
+            return
+        print(f"\n{metadata}\n")
+
+    def on_error(self, error, **kwargs):
+        if error is None:
+            return
+        print(f"\n{error}\n")
+
+    dg_connection = deepgram.listen.live.v("1")
+
+    dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+    # dg_connection.on(LiveTranscriptionEvents.Metadata, on_metadata)
+    dg_connection.on(LiveTranscriptionEvents.Error, on_error)
+
+    dg_connection.start(
+        options=options,
+        members=dict(first_message=True, first_transcript=True),
+        **dict(kwargs),
+    )
+
+    print("\n\nPress Enter to stop recording...\n\n")
+    print("🟢 (1/5) Successfully opened Deepgram streaming connection")
+    print(
+        f'🟢 (2/5) Ready to stream {method if (method == "mic" or method == "url") else kwargs["filepath"]} audio to Deepgram{". Speak into your microphone to transcribe." if method == "mic" else ""}'
+    )
 
     if method == "mic":
-        deepgram_url += "&encoding=linear16&sample_rate=16000"
+        # create microphone
+        microphone = Microphone(dg_connection.send)
 
+        # start microphone
+        microphone.start()
+
+        # signal finished
+        input("")
+
+        # stop microphone
+        microphone.finish()
+    elif method == "url":
+        lock_exit = threading.Lock()
+        exit = False
+
+        # define a worker thread
+        def httpThread():
+            with httpx.stream("GET", kwargs["url"]) as r:
+                for data in r.iter_bytes():
+                    lock_exit.acquire()
+                    if exit:
+                        break
+                    lock_exit.release()
+
+                    dg_connection.send(data)
+
+        # start the worker thread
+        myHttp = threading.Thread(target=httpThread)
+        myHttp.start()
+
+        # signal finished
+        input("")
+
+        lock_exit.acquire()
+        exit = True
+        lock_exit.release()
+
+        # Wait for the HTTP thread to close and join
+        myHttp.join()
     elif method == "wav":
+        # wav data
         data = kwargs["data"]
-        deepgram_url += f'&channels={kwargs["channels"]}&sample_rate={kwargs["sample_rate"]}&encoding=linear16'
 
-    # Connect to the real-time streaming endpoint, attaching our credentials.
-    async with websockets.connect(
-        deepgram_url, extra_headers={"Authorization": "Token {}".format(key)}
-    ) as ws:
-        print(f'ℹ️  Request ID: {ws.response_headers.get("dg-request-id")}')
-        if kwargs["model"]:
-            print(f'ℹ️  Model: {kwargs["model"]}')
-        if kwargs["tier"]:
-            print(f'ℹ️  Tier: {kwargs["tier"]}')
-        print("🟢 (1/5) Successfully opened Deepgram streaming connection")
+        lock_exit = threading.Lock()
+        exit = False
 
-        async def sender(ws):
-            print(
-                f'🟢 (2/5) Ready to stream {method if (method == "mic" or method == "url") else kwargs["filepath"]} audio to Deepgram{". Speak into your microphone to transcribe." if method == "mic" else ""}'
+        def wavThread():
+            nonlocal data
+
+            # How many bytes are contained in one second of audio?
+            byte_rate = (
+                kwargs["sample_width"] * kwargs["sample_rate"] * kwargs["channels"]
             )
+            # How many bytes are in `REALTIME_RESOLUTION` seconds of audio?
+            chunk_size = int(byte_rate * REALTIME_RESOLUTION)
 
-            if method == "mic":
-                try:
-                    while True:
-                        mic_data = await audio_queue.get()
-                        all_mic_data.append(mic_data)
-                        await ws.send(mic_data)
-                except websockets.exceptions.ConnectionClosedOK:
-                    await ws.send(json.dumps({"type": "CloseStream"}))
-                    print(
-                        "🟢 (5/5) Successfully closed Deepgram connection, waiting for final transcripts if necessary"
-                    )
+            try:
+                while len(data):
+                    lock_exit.acquire()
+                    if exit:
+                        break
+                    lock_exit.release()
 
-                except Exception as e:
-                    print(f"Error while sending: {str(e)}")
-                    raise
+                    chunk, data = data[:chunk_size], data[chunk_size:]
+                    # Mimic real-time by waiting `REALTIME_RESOLUTION` seconds
+                    # before the next packet.
+                    sleep(REALTIME_RESOLUTION)
+                    # Send the data
+                    dg_connection.send(chunk)
+            except Exception as e:
+                print(f"🔴 ERROR: Something happened while sending, {e}")
+                raise e
 
-            elif method == "url":
-                # Listen for the connection to open and send streaming audio from the URL to Deepgram
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(kwargs["url"]) as audio:
-                        while True:
-                            remote_url_data = await audio.content.readany()
-                            await ws.send(remote_url_data)
+        # start the worker thread
+        myWav = threading.Thread(target=wavThread)
+        myWav.start()
 
-                            # If no data is being sent from the live stream, then break out of the loop.
-                            if not remote_url_data:
-                                break
+        # signal finished
+        input("")
 
-            elif method == "wav":
-                nonlocal data
-                # How many bytes are contained in one second of audio?
-                byte_rate = (
-                    kwargs["sample_width"] * kwargs["sample_rate"] * kwargs["channels"]
-                )
-                # How many bytes are in `REALTIME_RESOLUTION` seconds of audio?
-                chunk_size = int(byte_rate * REALTIME_RESOLUTION)
+        lock_exit.acquire()
+        exit = True
+        lock_exit.release()
 
-                try:
-                    while len(data):
-                        chunk, data = data[:chunk_size], data[chunk_size:]
-                        # Mimic real-time by waiting `REALTIME_RESOLUTION` seconds
-                        # before the next packet.
-                        await asyncio.sleep(REALTIME_RESOLUTION)
-                        # Send the data
-                        await ws.send(chunk)
+        # Wait for the HTTP thread to close and join
+        myWav.join()
 
-                    await ws.send(json.dumps({"type": "CloseStream"}))
-                    print(
-                        "🟢 (5/5) Successfully closed Deepgram connection, waiting for final transcripts if necessary"
-                    )
-                except Exception as e:
-                    print(f"🔴 ERROR: Something happened while sending, {e}")
-                    raise e
-
-            return
-
-        async def receiver(ws):
-            """Print out the messages received from the server."""
-            first_message = True
-            first_transcript = True
-            transcript = ""
-
-            async for msg in ws:
-                res = json.loads(msg)
-                if first_message:
-                    print(
-                        "🟢 (3/5) Successfully receiving Deepgram messages, waiting for finalized transcription..."
-                    )
-                    first_message = False
-                try:
-                    # handle local server messages
-                    if res.get("msg"):
-                        print(res["msg"])
-                    if res.get("is_final"):
-                        transcript = (
-                            res.get("channel", {})
-                            .get("alternatives", [{}])[0]
-                            .get("transcript", "")
-                        )
-                        if kwargs["timestamps"]:
-                            words = res.get("channel", {}).get("alternatives", [{}])[0].get("words", [])
-                            start = words[0]["start"] if words else None
-                            end = words[-1]["end"] if words else None
-                            transcript += " [{} - {}]".format(start, end) if (start and end) else ""
-                        if transcript != "":
-                            if first_transcript:
-                                print("🟢 (4/5) Began receiving transcription")
-                                # if using webvtt, print out header
-                                if format == "vtt":
-                                    print("WEBVTT\n")
-                                first_transcript = False
-                            if format == "vtt" or format == "srt":
-                                transcript = subtitle_formatter(res, format)
-                            print(transcript)
-                            all_transcripts.append(transcript)
-
-                        # if using the microphone, close stream if user says "goodbye"
-                        if method == "mic" and "goodbye" in transcript.lower():
-                            await ws.send(json.dumps({"type": "CloseStream"}))
-                            print(
-                                "🟢 (5/5) Successfully closed Deepgram connection, waiting for final transcripts if necessary"
-                            )
-
-                    # handle end of stream
-                    if res.get("created"):
-                        # save subtitle data if specified
-                        if format == "vtt" or format == "srt":
-                            data_dir = os.path.abspath(
-                                os.path.join(os.path.curdir, "data")
-                            )
-                            if not os.path.exists(data_dir):
-                                os.makedirs(data_dir)
-
-                            transcript_file_path = os.path.abspath(
-                                os.path.join(
-                                    data_dir,
-                                    f"{startTime.strftime('%Y%m%d%H%M')}.{format}",
-                                )
-                            )
-                            with open(transcript_file_path, "w") as f:
-                                f.write("".join(all_transcripts))
-                            print(f"🟢 Subtitles saved to {transcript_file_path}")
-
-                            # also save mic data if we were live streaming audio
-                            # otherwise the wav file will already be saved to disk
-                            if method == "mic":
-                                wave_file_path = os.path.abspath(
-                                    os.path.join(
-                                        data_dir,
-                                        f"{startTime.strftime('%Y%m%d%H%M')}.wav",
-                                    )
-                                )
-                                wave_file = wave.open(wave_file_path, "wb")
-                                wave_file.setnchannels(CHANNELS)
-                                wave_file.setsampwidth(SAMPLE_SIZE)
-                                wave_file.setframerate(RATE)
-                                wave_file.writeframes(b"".join(all_mic_data))
-                                wave_file.close()
-                                print(f"🟢 Mic audio saved to {wave_file_path}")
-
-                        print(
-                            f'🟢 Request finished with a duration of {res["duration"]} seconds. Exiting!'
-                        )
-                except KeyError:
-                    print(f"🔴 ERROR: Received unexpected API response! {msg}")
-
-        # Set up microphone if streaming from mic
-        async def microphone():
-            audio = pyaudio.PyAudio()
-            stream = audio.open(
-                format=FORMAT,
-                channels=CHANNELS,
-                rate=RATE,
-                input=True,
-                frames_per_buffer=CHUNK,
-                stream_callback=mic_callback,
-            )
-
-            stream.start_stream()
-
-            global SAMPLE_SIZE
-            SAMPLE_SIZE = audio.get_sample_size(FORMAT)
-
-            while stream.is_active():
-                await asyncio.sleep(0.1)
-
-            stream.stop_stream()
-            stream.close()
-
-        functions = [
-            asyncio.ensure_future(sender(ws)),
-            asyncio.ensure_future(receiver(ws)),
-        ]
-
-        if method == "mic":
-            functions.append(asyncio.ensure_future(microphone()))
-
-        await asyncio.gather(*functions)
+    dg_connection.finish()
+    print(
+        "🟢 (5/5) Successfully closed Deepgram connection, waiting for final transcripts if necessary"
+    )
 
 
 def validate_input(input):
@@ -303,20 +265,6 @@ def validate_format(format):
         f'{format} is invalid. Please enter "text", "vtt", or "srt".'
     )
 
-def validate_dg_host(dg_host):
-    if (
-        # Check that the host is a websocket URL
-        dg_host.startswith("wss://")
-        or dg_host.startswith("ws://")
-    ):
-        # Trim trailing slash if necessary
-        if dg_host[-1] == '/':
-            return dg_host[:-1]
-        return dg_host 
-
-    raise argparse.ArgumentTypeError(
-            f'{dg_host} is invalid. Please provide a WebSocket URL in the format "{{wss|ws}}://hostname[:port]".'
-    )
 
 def parse_args():
     """Parses the command-line arguments."""
@@ -324,7 +272,7 @@ def parse_args():
         description="Submits data to the real-time streaming endpoint."
     )
     parser.add_argument(
-        "-k", "--key", required=True, help="YOUR_DEEPGRAM_API_KEY (authorization)"
+        "-k", "--key", help="YOUR_DEEPGRAM_API_KEY (authorization)", default=""
     )
     parser.add_argument(
         "-i",
@@ -338,7 +286,7 @@ def parse_args():
     parser.add_argument(
         "-m",
         "--model",
-        help='Which model to make your request against. Defaults to none specified. See https://developers.deepgram.com/docs/models-overview for all model options.',
+        help="Which model to make your request against. Defaults to none specified. See https://developers.deepgram.com/docs/models-overview for all model options.",
         nargs="?",
         const="",
         default="general",
@@ -346,15 +294,15 @@ def parse_args():
     parser.add_argument(
         "-t",
         "--tier",
-        help='Which model tier to make your request against. Defaults to none specified. See https://developers.deepgram.com/docs/tier for all tier options.',
+        help="Which model tier to make your request against. Defaults to none specified. See https://developers.deepgram.com/docs/tier for all tier options.",
         nargs="?",
         const="",
-        default="",
+        default="base",
     )
     parser.add_argument(
         "-ts",
         "--timestamps",
-        help='Whether to include timestamps in the printed streaming transcript. Defaults to False.',
+        help="Whether to include timestamps in the printed streaming transcript. Defaults to False.",
         nargs="?",
         const=1,
         default=False,
@@ -368,14 +316,12 @@ def parse_args():
         default="text",
         type=validate_format,
     )
-    #Parse the host
     parser.add_argument(
         "--host",
         help='Point the test suite at a specific Deepgram URL (useful for on-prem deployments). Takes "{{wss|ws}}://hostname[:port]" as its value. Defaults to "wss://api.deepgram.com".',
         nargs="?",
         const=1,
-        default="wss://api.deepgram.com",
-        type=validate_dg_host,
+        default="api.deepgram.com",
     )
     return parser.parse_args()
 
@@ -390,11 +336,19 @@ def main():
 
     try:
         if input.lower().startswith("mic"):
-            asyncio.run(run(args.key, "mic", format, model=args.model, tier=args.tier, host=host, timestamps=args.timestamps))
-
+            run(
+                args.key,
+                "mic",
+                format,
+                model=args.model,
+                tier=args.tier,
+                host=host,
+                channels=CHANNELS,
+                sample_rate=RATE,
+                timestamps=args.timestamps,
+            )
         elif input.lower().endswith("wav"):
             if os.path.exists(input):
-                # Open the audio file.
                 with wave.open(input, "rb") as fh:
                     (
                         channels,
@@ -406,29 +360,39 @@ def main():
                     ) = fh.getparams()
                     assert sample_width == 2, "WAV data must be 16-bit."
                     data = fh.readframes(num_samples)
-                    asyncio.run(
-                        run(
-                            args.key,
-                            "wav",
-                            format,
-                            model=args.model,
-                            tier=args.tier,
-                            data=data,
-                            channels=channels,
-                            sample_width=sample_width,
-                            sample_rate=sample_rate,
-                            filepath=args.input,
-                            host=host,
-                            timestamps=args.timestamps,
-                        )
-                    )
+                run(
+                    args.key,
+                    "wav",
+                    format,
+                    model=args.model,
+                    tier=args.tier,
+                    data=data,
+                    channels=channels,
+                    sample_width=sample_width,
+                    sample_rate=sample_rate,
+                    filepath=args.input,
+                    host=host,
+                    timestamps=args.timestamps,
+                )
             else:
                 raise argparse.ArgumentTypeError(
                     f"🔴 {args.input} is not a valid WAV file."
                 )
 
         elif input.lower().startswith("http"):
-            asyncio.run(run(args.key, "url", format, model=args.model, tier=args.tier, url=input, host=host, timestamps=args.timestamps))
+            # run(args.key, "url", format, model=args.model, tier=args.tier, url=input, host=host, timestamps=args.timestamps)
+            run(
+                args.key,
+                "url",
+                format,
+                model=args.model,
+                tier=args.tier,
+                url=input,
+                host=host,
+                channels=CHANNELS,
+                sample_rate=RATE,
+                timestamps=args.timestamps,
+            )
 
         else:
             raise argparse.ArgumentTypeError(
