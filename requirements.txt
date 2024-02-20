@@ -1,4 +1,4 @@
-deepgram-sdk==3.*
-pyaudio
-websockets
-httpx
+aiohttp==3.7.4.post0
+PyAudio==0.2.13
+pydub==0.25.1
+websockets==10.3
