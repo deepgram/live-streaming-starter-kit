@@ -20,8 +20,6 @@ CHANNELS = 1
 RATE = 16000
 CHUNK = 8000
 
-audio_queue = asyncio.Queue()
-
 # Mimic sending a real-time stream by sending this many seconds of audio at a time.
 # Used for file "streaming" only.
 REALTIME_RESOLUTION = 0.250
@@ -57,14 +55,15 @@ def subtitle_formatter(response, format):
     return subtitle_string
 
 
-# Used for microphone streaming only.
-def mic_callback(input_data, frame_count, time_info, status_flag):
-    audio_queue.put_nowait(input_data)
-    return (input_data, pyaudio.paContinue)
-
-
 async def run(key, method, format, **kwargs):
     deepgram_url = f'{kwargs["host"]}/v1/listen?punctuate=true'
+
+    audio_queue = asyncio.Queue()
+
+    # Used for microphone streaming only.
+    def mic_callback(input_data, frame_count, time_info, status_flag):
+        audio_queue.put_nowait(input_data)
+        return (input_data, pyaudio.paContinue)
 
     if kwargs["model"]:
         deepgram_url += f"&model={kwargs['model']}"
