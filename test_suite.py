@@ -20,7 +20,9 @@ CHANNELS = 1
 RATE = 16000
 CHUNK = 8000
 
-audio_queue = asyncio.Queue()
+# Created inside `run` so they are bound to the running event loop.
+audio_queue = None
+event_loop = None
 
 # Mimic sending a real-time stream by sending this many seconds of audio at a time.
 # Used for file "streaming" only.
@@ -58,12 +60,17 @@ def subtitle_formatter(response, format):
 
 
 # Used for microphone streaming only.
+# PyAudio invokes this on its own thread, need to hand data to the event loop thread-safely.
 def mic_callback(input_data, frame_count, time_info, status_flag):
-    audio_queue.put_nowait(input_data)
+    event_loop.call_soon_threadsafe(audio_queue.put_nowait, input_data)
     return (input_data, pyaudio.paContinue)
 
 
 async def run(key, method, format, **kwargs):
+    global audio_queue, event_loop
+    audio_queue = asyncio.Queue()
+    event_loop = asyncio.get_running_loop()
+
     deepgram_url = f'{kwargs["host"]}/v1/listen?punctuate=true'
 
     if kwargs["model"]:
