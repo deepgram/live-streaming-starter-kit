@@ -15,7 +15,7 @@ Please refer to our [Documentation](https://developers.deepgram.com/docs/getting
 
 # Requirements
 
-- Python >= 3.6+
+- Python >= 3.7
 - [portaudio](http://portaudio.com/)
 - A valid Deepgram API key
 
